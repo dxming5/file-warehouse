@@ -49,10 +49,9 @@ file-warehouse/
 ├── 启动.pyw               # 一键启动（无控制台，推荐）
 ├── 启动.bat               # 带控制台启动（调试用）
 ├── 打包.bat               # PyInstaller 打包脚本
-├── 个人仓库需求.md         # 需求文档
 ├── README.md              # 本文件
-├── templates/
-│   └── index.html         # 前端单页面（原生 JS，无框架）
+└── templates/
+    └── index.html         # 前端单页面（原生 JS，无框架）
 ```
 
 ---
@@ -61,12 +60,15 @@ file-warehouse/
 
 | 模块 | 功能 |
 |------|------|
-| 📥 文件管理 | 添加、编辑、删除、批量操作、打开/定位源文件 |
+| 📥 文件管理 | 添加、编辑、删除、打开/定位源文件 |
 | 📁 文件夹分类 | 自定义分类（新建/编辑/删除），按分类筛选 |
-| 🔍 搜索排序 | 关键词搜索 + 多种排序方式 |
-| ✅ 文件校验 | 检测源文件是否仍然存在 |
-| 📤 数据管理 | JSON 导出/导入，方便备份迁移 |
-| 📊 统计面板 | 文件总数、总大小、近期新增 |
+| 🔍 搜索排序 | 关键词搜索 + 按名称/时间/作者/出版时间/阅读状态排序 |
+| ⭐ 收藏标记 | 文件收藏/取消收藏，快速标记重要文件 |
+| 📖 阅读状态 | 未阅读/在阅读/已阅读 三种状态标记 |
+| 🖱️ 点击高亮 | 点击文件项点亮标记，便于浏览定位 |
+| 👤 元数据 | 支持作者、出版时间等扩展字段 |
+| ✅ 文件校验 | 检测源文件是否仍然存在，丢失文件提醒 |
+| 📊 统计面板 | 文件总数、现存/丢失统计、近期新增 |
 
 ---
 
@@ -80,12 +82,13 @@ file-warehouse/
 | POST | `/api/files` | 添加单个文件 |
 | POST | `/api/files/batch-add` | 批量添加文件 |
 | PUT | `/api/files/<id>` | 更新文件记录 |
-| DELETE | `/api/files/<id>` | 移除文件记录 |
-| POST | `/api/files/batch-delete` | 批量移除 |
+| DELETE | `/api/files/<id>` | 移除文件记录（不删除源文件） |
 | POST | `/api/files/<id>/open` | 打开源文件 |
 | POST | `/api/files/<id>/locate` | 在资源管理器中定位 |
 | POST | `/api/files/<id>/verify` | 校验单个文件 |
 | POST | `/api/files/verify-all` | 批量校验所有文件 |
+| POST | `/api/files/<id>/favorite` | 切换收藏状态 |
+| PUT | `/api/files/<id>/read-status` | 更新阅读状态 |
 
 ### 分类
 
@@ -101,9 +104,27 @@ file-warehouse/
 | 方法 | 路径 | 说明 |
 |------|------|------|
 | GET | `/api/stats` | 获取统计数据 |
-| GET | `/api/export` | 导出 JSON |
-| POST | `/api/import` | 导入 JSON |
 | POST | `/api/browse-files` | 打开原生文件选择对话框 |
+
+---
+
+## 数据库字段
+
+files 表核心字段：
+
+| 字段 | 类型 | 说明 |
+|------|------|------|
+| title | TEXT | 文件标题 |
+| file_path | TEXT | 文件路径（相对路径存储） |
+| file_name | TEXT | 文件名 |
+| file_ext | TEXT | 文件后缀 |
+| file_size | INTEGER | 文件大小（字节） |
+| category_id | INTEGER | 所属分类（外键） |
+| author | TEXT | 作者 |
+| year | TEXT | 出版时间 |
+| read_status | TEXT | 阅读状态：unread / reading / read |
+| favorite | INTEGER | 收藏标记：0 或 1 |
+| file_exists | INTEGER | 源文件是否仍存在 |
 
 ---
 
@@ -116,3 +137,4 @@ file-warehouse/
 - **桌面原生**：pywebview 创建独立窗口，无需浏览器
 - **单文件分发**：支持 PyInstaller 打包为 exe，双击即用
 - **原生文件选择**：通过 tkinter 获取文件真实绝对路径
+- **相对路径存储**：文件路径以相对路径入库，方便整体迁移
