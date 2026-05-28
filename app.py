@@ -131,6 +131,20 @@ def format_file_size(size_bytes):
         size_bytes /= 1024
     return f"{size_bytes:.1f} PB"
 
+def to_relative_path(abs_path):
+    """将绝对路径转为相对于程序运行目录的路径"""
+    try:
+        return os.path.relpath(abs_path, BASE_DIR)
+    except ValueError:
+        # 跨驱动器时无法计算相对路径，返回原路径
+        return abs_path
+
+def to_absolute_path(rel_path):
+    """将相对路径还原为绝对路径"""
+    if os.path.isabs(rel_path):
+        return rel_path
+    return os.path.normpath(os.path.join(BASE_DIR, rel_path))
+
 def open_file_with_default(file_path):
     """使用系统默认程序打开文件"""
     try:
@@ -163,7 +177,7 @@ def verify_files(db):
     rows = db.execute("SELECT id, file_path FROM files WHERE file_exists = 1").fetchall()
     to_update = []
     for row in rows:
-        if not os.path.exists(row['file_path']):
+        if not os.path.exists(to_absolute_path(row['file_path'])):
             to_update.append(row['id'])
     if to_update:
         placeholders = ','.join('?' * len(to_update))
@@ -291,20 +305,22 @@ def add_file():
     if not file_path:
         return jsonify({'error': '文件路径不能为空'}), 400
 
-    # 规范化路径
-    file_path = os.path.normpath(file_path)
+    # 规范化路径（绝对路径用于获取文件信息）
+    abs_path = os.path.normpath(file_path)
+    # 转为相对路径存储
+    rel_path = to_relative_path(abs_path)
 
     # 检查是否已存在
-    existing = db.execute("SELECT id FROM files WHERE file_path = ?", (file_path,)).fetchone()
+    existing = db.execute("SELECT id FROM files WHERE file_path = ?", (rel_path,)).fetchone()
     if existing:
         return jsonify({'error': '该文件已在仓库中', 'id': existing['id']}), 409
 
-    info = get_file_info(file_path)
+    info = get_file_info(abs_path)
     title = data.get('title', '').strip() or info['name']
     category_id = data.get('category_id') or None
     # 如果启用自动文件夹分类且未指定分类
     if data.get('auto_category') and not category_id:
-        category_id = get_or_create_folder_category(db, file_path)
+        category_id = get_or_create_folder_category(db, abs_path)
     tags = data.get('tags', '').strip()
     notes = data.get('notes', '').strip()
     rating = data.get('rating', 0)
@@ -313,7 +329,7 @@ def add_file():
         INSERT INTO files (title, file_path, file_name, file_ext, file_size,
                           category_id, tags, notes, rating, file_exists)
         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-    """, (title, file_path, info['name'], info['ext'], info['size'],
+    """, (title, rel_path, info['name'], info['ext'], info['size'],
           category_id, tags, notes, rating, info['exists']))
     db.commit()
 
@@ -341,25 +357,26 @@ def batch_add_files():
         file_path = file_path.strip()
         if not file_path:
             continue
-        file_path = os.path.normpath(file_path)
+        abs_path = os.path.normpath(file_path)
+        rel_path = to_relative_path(abs_path)
 
         # 检查是否已存在
-        existing = db.execute("SELECT id FROM files WHERE file_path = ?", (file_path,)).fetchone()
+        existing = db.execute("SELECT id FROM files WHERE file_path = ?", (rel_path,)).fetchone()
         if existing:
             skipped += 1
             continue
 
-        info = get_file_info(file_path)
+        info = get_file_info(abs_path)
         title = info['name']
         file_category_id = category_id  # 手动选择的优先
         if not file_category_id and auto_category:
-            file_category_id = get_or_create_folder_category(db, file_path)
+            file_category_id = get_or_create_folder_category(db, abs_path)
 
         db.execute("""
             INSERT INTO files (title, file_path, file_name, file_ext, file_size,
                               category_id, tags, notes, rating, file_exists)
             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-        """, (title, file_path, info['name'], info['ext'], info['size'],
+        """, (title, rel_path, info['name'], info['ext'], info['size'],
               file_category_id, base_tags, base_notes, 0, info['exists']))
         added += 1
 
@@ -431,12 +448,13 @@ def open_file(file_id):
     if not file:
         return jsonify({'error': '记录不存在'}), 404
 
-    if not os.path.exists(file['file_path']):
+    abs_path = to_absolute_path(file['file_path'])
+    if not os.path.exists(abs_path):
         db.execute("UPDATE files SET file_exists=0 WHERE id=?", (file_id,))
         db.commit()
         return jsonify({'error': '文件不存在，可能已被移动或删除'}), 404
 
-    success = open_file_with_default(file['file_path'])
+    success = open_file_with_default(abs_path)
     if success:
         return jsonify({'message': '已打开'})
     return jsonify({'error': '无法打开文件'}), 500
@@ -449,7 +467,8 @@ def locate_file(file_id):
     if not file:
         return jsonify({'error': '记录不存在'}), 404
 
-    success = open_folder(file['file_path'])
+    abs_path = to_absolute_path(file['file_path'])
+    success = open_folder(abs_path)
     if success:
         return jsonify({'message': '已定位'})
     return jsonify({'error': '无法定位'}), 500
@@ -462,7 +481,8 @@ def verify_file(file_id):
     if not file:
         return jsonify({'error': '记录不存在'}), 404
 
-    exists = 1 if os.path.exists(file['file_path']) else 0
+    abs_path = to_absolute_path(file['file_path'])
+    exists = 1 if os.path.exists(abs_path) else 0
     db.execute("UPDATE files SET file_exists=?, last_checked=datetime('now','localtime') WHERE id=?",
                (exists, file_id))
     db.commit()
@@ -590,13 +610,17 @@ def import_data():
     # 导入文件
     for f in data.get('files', []):
         try:
+            # 兼容旧数据：如果导入的是绝对路径，转为相对路径
+            imported_path = f['file_path']
+            if os.path.isabs(imported_path):
+                imported_path = to_relative_path(imported_path)
             db.execute("""
                 INSERT OR IGNORE INTO files
                 (title, file_path, file_name, file_ext, file_size, category_id,
                  tags, notes, rating, created_at, updated_at, file_exists)
                 VALUES (?,?,?,?,?,?,?,?,?,?,?,?)
             """, (
-                f['title'], f['file_path'], f['file_name'], f.get('file_ext', ''),
+                f['title'], imported_path, f['file_name'], f.get('file_ext', ''),
                 f.get('file_size', 0), f.get('category_id'), f.get('tags', ''),
                 f.get('notes', ''), f.get('rating', 0),
                 f.get('created_at', datetime.now().strftime('%Y-%m-%d %H:%M:%S')),
@@ -626,7 +650,7 @@ def browse_files():
     result = []
     for fp in file_paths:
         info = get_file_info(fp)
-        result.append({'path': fp, 'name': info['name'], 'size_fmt': info['size_fmt'], 'ext': info['ext']})
+        result.append({'path': to_relative_path(fp), 'name': info['name'], 'size_fmt': info['size_fmt'], 'ext': info['ext']})
     return jsonify({'files': result})
 
 
