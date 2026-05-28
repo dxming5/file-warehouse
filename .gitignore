@@ -1,0 +1,13 @@
+# 数据库（含个人数据）
+file_warehouse.db
+
+# PyInstaller 打包产物
+build/
+dist/
+*.spec
+
+# Python 缓存
+__pycache__/
+*.pyc
+*.pyo
+
