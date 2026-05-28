@@ -237,16 +237,16 @@
             overflow-y: auto;
             padding: 16px 24px;
         }
-        .file-list { display: flex; flex-direction: column; gap: 4px; }
+        .file-list { display: flex; flex-direction: column; gap: 2px; }
 
         .file-item {
             display: flex;
             align-items: center;
-            gap: 14px;
-            padding: 14px 18px;
+            gap: 10px;
+            padding: 6px 14px;
             background: var(--card-bg);
             border: 1px solid var(--border);
-            border-radius: var(--radius);
+            border-radius: var(--radius-sm);
             transition: var(--transition);
             cursor: pointer;
         }
@@ -254,29 +254,64 @@
             border-color: #c7c9d0;
             box-shadow: var(--shadow);
         }
-        .file-item.selected {
-            border-color: var(--primary);
-            background: var(--primary-light);
-        }
         .file-item.missing {
             opacity: .6;
             border-left: 3px solid var(--warning);
         }
+        .file-item.highlighted {
+            border-color: var(--primary);
+            background: var(--primary-light);
+            box-shadow: 0 0 0 2px rgba(79,70,229,.2);
+        }
 
         .file-icon {
-            font-size: 28px;
+            font-size: 22px;
             flex-shrink: 0;
-            width: 40px;
+            width: 32px;
             text-align: center;
         }
         .file-info { flex: 1; min-width: 0; }
         .file-info .name {
-            font-size: 15px;
+            font-size: 14px;
             font-weight: 600;
             white-space: nowrap;
             overflow: hidden;
             text-overflow: ellipsis;
+            display: flex;
+            align-items: center;
+            gap: 8px;
         }
+        .author-tag {
+            font-size: 12px;
+            font-weight: 400;
+            color: var(--text-secondary);
+            background: #f0f3ff;
+            border: 1px solid #d4dafc;
+            border-radius: 10px;
+            padding: 1px 8px;
+            white-space: nowrap;
+            flex-shrink: 0;
+        }
+        .year-tag {
+            font-size: 12px;
+            font-weight: 400;
+            color: var(--text-secondary);
+            background: #f0fdf4;
+            border: 1px solid #bbf7d0;
+            border-radius: 10px;
+            padding: 1px 8px;
+            white-space: nowrap;
+            flex-shrink: 0;
+        }
+        .read-status-select {
+            font-size: 12px;
+            padding: 1px 6px;
+        }
+        .read-status-select:focus { border-color: var(--primary); }
+        .read-status-select.status-unread { background: #f3f4f6; color: var(--text-muted); }
+        .read-status-select.status-reading { background: #fffbeb; color: #d97706; border-color: #fcd34d; }
+        .read-status-select.status-read { background: #ecfdf5; color: #059669; border-color: #a7f3d0; }
+        .read-status-select option { background: #fff; color: var(--text); }
         .file-info .meta {
             font-size: 12px;
             color: var(--text-muted);
@@ -293,8 +328,15 @@
         }
 
         .file-actions { display: flex; gap: 4px; flex-shrink: 0; }
+        .file-tags {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            flex-shrink: 0;
+            margin-left: auto;
+        }
         .btn-icon {
-            width: 34px; height: 34px;
+            width: 26px; height: 26px;
             border: none;
             background: transparent;
             border-radius: var(--radius-sm);
@@ -308,6 +350,9 @@
         }
         .btn-icon:hover { background: #f3f4f6; color: var(--text); }
         .btn-icon.danger:hover { background: var(--danger-light); color: var(--danger); }
+        .btn-icon.fav { font-size: 20px; }
+        .btn-icon.fav.active { color: #f59e0b; }
+        .btn-icon.fav:hover { background: #fffbeb; color: #f59e0b; }
 
         .btn {
             padding: 8px 16px;
@@ -392,15 +437,9 @@
             justify-content: flex-end;
             margin-top: 20px;
         }
-
-        .rating-stars {
-            display: flex;
-            gap: 4px;
-            font-size: 22px;
-            cursor: pointer;
-        }
-        .rating-stars .star { color: #d1d5db; transition: var(--transition); }
-        .rating-stars .star.active { color: #f59e0b; }
+        .confirm-modal { width: 360px; text-align: center; padding: 28px; }
+        .confirm-modal h3 { font-size: 18px; margin-bottom: 24px; color: var(--text); display: block; }
+        .confirm-modal .modal-actions { justify-content: center; }
 
         /* ===== 空状态 ===== */
         .empty-state {
@@ -456,21 +495,6 @@
             from { transform: translateY(20px); opacity: 0; }
             to { transform: translateY(0); opacity: 1; }
         }
-
-        /* ===== 选中栏 ===== */
-        .selection-bar {
-            display: none;
-            align-items: center;
-            gap: 12px;
-            padding: 10px 24px;
-            background: var(--primary-light);
-            border-bottom: 1px solid #c7d2fe;
-            font-size: 14px;
-            color: var(--primary);
-            font-weight: 500;
-        }
-        .selection-bar.show { display: flex; }
-        .selection-bar .btn { font-size: 12px; }
 
         /* ===== 滚动条 ===== */
         ::-webkit-scrollbar { width: 6px; }
@@ -591,7 +615,6 @@
         </nav>
         <div class="sidebar-footer">
             <div class="stats-row"><span>总文件数</span><span class="stat-val" id="stat-total">0</span></div>
-            <div class="stats-row"><span>总大小</span><span class="stat-val" id="stat-size">0 B</span></div>
             <div class="stats-row"><span>近7天新增</span><span class="stat-val" id="stat-recent">0</span></div>
         </div>
     </aside>
@@ -603,31 +626,22 @@
             <span class="title" id="current-title">全部文件</span>
             <span class="count" id="current-count">0 项</span>
             <div class="topbar-actions">
-                <button class="btn btn-secondary btn-sm" onclick="exportData()">📤 导出</button>
-                <button class="btn btn-secondary btn-sm" onclick="document.getElementById('import-file').click()">📥 导入</button>
-                <input type="file" id="import-file" accept=".json" style="display:none" onchange="importData(this)">
                 <button class="btn btn-primary" onclick="openAddModal()">＋ 添加文件</button>
             </div>
         </div>
 
-        <!-- Selection Bar -->
-        <div class="selection-bar" id="selection-bar">
-            <span>已选 <strong id="selected-count">0</strong> 项</span>
-            <button class="btn btn-danger btn-sm" onclick="batchDelete()">🗑️ 批量移除</button>
-            <button class="btn btn-sm btn-secondary" onclick="clearSelection()">取消选择</button>
-        </div>
-
         <!-- Search -->
         <div class="search-bar">
-            <input type="text" class="search-input" id="search-input" placeholder="搜索文件名、路径、备注..." oninput="debounceSearch()">
+            <input type="text" class="search-input" id="search-input" placeholder="搜索标题名..." oninput="debounceSearch()">
             <select class="filter-select" id="sort-select" onchange="loadFiles()">
                 <option value="created_at_desc">最近添加</option>
-                <option value="updated_at_desc">最近更新</option>
                 <option value="title_asc">名称 A-Z</option>
                 <option value="title_desc">名称 Z-A</option>
-                <option value="file_size_desc">文件大小 ↓</option>
-                <option value="file_size_asc">文件大小 ↑</option>
-                <option value="rating_desc">评分 ↓</option>
+                <option value="author_asc">作者 A-Z</option>
+                <option value="author_desc">作者 Z-A</option>
+                <option value="year_desc">出版时间 ↓</option>
+                <option value="year_asc">出版时间 ↑</option>
+                <option value="read_status_desc">阅读状态</option>
             </select>
             <button class="btn btn-secondary btn-sm" onclick="verifyAll()" title="校验所有文件是否存在">🔍 校验</button>
         </div>
@@ -655,26 +669,23 @@
                 <input type="hidden" id="file-id">
                 <div class="form-group">
                     <label>文件路径</label>
-                    <input type="text" id="file-path" disabled style="color:var(--text-muted);background:#f3f4f6">
+                    <input type="text" id="file-path" placeholder="文件的完整路径">
                 </div>
                 <div class="form-group">
                     <label>标题（留空则自动使用文件名）</label>
                     <input type="text" id="file-title" placeholder="文件的显示名称">
                 </div>
                 <div class="form-group">
+                    <label>出版时间</label>
+                    <input type="text" id="file-year" placeholder="如：2023（选填）">
+                </div>
+                <div class="form-group">
+                    <label>作者</label>
+                    <input type="text" id="file-author" placeholder="作者信息（选填）">
+                </div>
+                <div class="form-group">
                     <label>分类</label>
                     <select id="file-category"></select>
-                </div>
-                <div class="form-group">
-                    <label>备注</label>
-                    <textarea id="file-notes" placeholder="添加备注信息..."></textarea>
-                </div>
-                <div class="form-group">
-                    <label>评分</label>
-                    <div class="rating-stars" id="rating-stars">
-                        <span class="star" data-r="1">★</span><span class="star" data-r="2">★</span>
-                        <span class="star" data-r="3">★</span><span class="star" data-r="4">★</span><span class="star" data-r="5">★</span>
-                    </div>
                 </div>
                 <div class="modal-actions">
                     <button type="button" class="btn btn-secondary" onclick="closeModal()">取消</button>
@@ -703,10 +714,6 @@
             <div class="form-group">
                 <label>分类</label>
                 <select id="batch-category"></select>
-            </div>
-            <div class="form-group">
-                <label>统一备注（选填）</label>
-                <textarea id="batch-notes" placeholder="添加备注信息..." rows="2"></textarea>
             </div>
             <div class="modal-actions">
                 <button type="button" class="btn btn-secondary" onclick="closeBatchModal()">取消</button>
@@ -747,15 +754,25 @@
         </div>
     </div>
 
+    <!-- 确认弹窗 -->
+    <div class="modal-overlay" id="confirm-overlay">
+        <div class="modal confirm-modal">
+            <h3 id="confirm-title">确认移出仓库</h3>
+            <div class="modal-actions">
+                <button class="btn btn-secondary" onclick="closeConfirm()">取消</button>
+                <button class="btn btn-danger" id="confirm-btn" onclick="executeConfirm()">确定</button>
+            </div>
+        </div>
+    </div>
+
     <script>
         // ========== State ==========
         let currentFilter = 'all';
         let currentCategory = null;
         let currentPage = 1;
-        let selectedIds = new Set();
         let editingId = null;
-        let rating = 0;
         let batchFiles = [];  // { name, path, folder }
+        let confirmCallback = null;
 
         // ========== Init ==========
         document.addEventListener('DOMContentLoaded', () => {
@@ -777,13 +794,6 @@
                     loadFiles();
                 });
             });
-
-            // Rating stars
-            document.querySelectorAll('#rating-stars .star').forEach(s => {
-                s.addEventListener('click', () => { rating = parseInt(s.dataset.r); updateStars(); });
-                s.addEventListener('mouseenter', () => { updateStars(parseInt(s.dataset.r)); });
-            });
-            document.getElementById('rating-stars').addEventListener('mouseleave', () => { updateStars(); });
 
             // Modal backdrop click
             document.getElementById('modal-overlay').addEventListener('click', (e) => {
@@ -813,8 +823,6 @@
                         }
                     });
                     updateBatchFileList();
-                    loadBatchCategoryOptions();
-                    document.getElementById('batch-modal-overlay').classList.add('show');
                 }
             } catch (err) {
                 showToast('选择文件失败: ' + err.message, 'error');
@@ -861,32 +869,33 @@
                 return;
             }
 
-            const notes = document.getElementById('batch-notes').value.trim();
             const batchCat = document.getElementById('batch-category');
             const selectedCatId = batchCat ? (batchCat.value || null) : null;
 
             const filePaths = batchFiles.map(f => f.path);
 
-            const resp = await fetch('/api/files/batch-add', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    file_paths: filePaths,
-                    auto_category: false,
-                    category_id: selectedCatId || null,
-                    notes,
-                }),
-            });
-            const data = await resp.json();
-
-            if (resp.ok) {
-                closeBatchModal();
-                loadFiles();
-                loadStats();
-                loadCategories();
-                showToast(data.message, 'success');
-            } else {
-                showToast(data.error || '添加失败', 'error');
+            try {
+                const resp = await fetch('/api/files/batch-add', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        file_paths: filePaths,
+                        auto_category: false,
+                        category_id: selectedCatId || null,
+                    }),
+                });
+                const data = await resp.json().catch(() => ({}));
+                if (resp.ok) {
+                    closeBatchModal();
+                    loadFiles();
+                    loadStats();
+                    loadCategories();
+                    showToast(data.message || '入库成功', 'success');
+                } else {
+                    showToast(data.error || '入库失败', 'error');
+                }
+            } catch (e) {
+                showToast('入库失败：' + (e.message || '未知错误'), 'error');
             }
         }
 
@@ -919,6 +928,24 @@
         function closeCatModal() {
             document.getElementById('cat-modal-overlay').classList.remove('show');
         }
+
+        function showConfirm(title, btnText, callback) {
+            document.getElementById('confirm-title').textContent = title;
+            document.getElementById('confirm-btn').textContent = btnText;
+            confirmCallback = callback;
+            document.getElementById('confirm-overlay').classList.add('show');
+        }
+        function closeConfirm() {
+            document.getElementById('confirm-overlay').classList.remove('show');
+            confirmCallback = null;
+        }
+        function executeConfirm() {
+            if (confirmCallback) confirmCallback();
+            closeConfirm();
+        }
+        document.getElementById('confirm-overlay').addEventListener('click', (e) => {
+            if (e.target === document.getElementById('confirm-overlay')) closeConfirm();
+        });
 
         function pickCatColor(color) {
             document.getElementById('new-cat-color').value = color;
@@ -974,11 +1001,11 @@
             }
         }
 
-        function loadBatchCategoryOptions() {
+        function loadBatchCategoryOptions(selectedId) {
             fetch('/api/categories').then(r => r.json()).then(cats => {
                 const sel = document.getElementById('batch-category');
                 sel.innerHTML = '<option value="">-- 不指定文件夹 --</option>' + cats.map(c =>
-                    `<option value="${c.id}">${c.name}</option>`
+                    `<option value="${c.id}" ${c.id == selectedId ? 'selected' : ''}>${c.name}</option>`
                 ).join('');
             });
         }
@@ -1004,7 +1031,6 @@
         function loadStats() {
             fetch('/api/stats').then(r => r.json()).then(s => {
                 document.getElementById('stat-total').textContent = s.total;
-                document.getElementById('stat-size').textContent = s.total_size;
                 document.getElementById('stat-recent').textContent = s.recent_7d;
                 document.getElementById('badge-all').textContent = s.total;
                 document.getElementById('badge-exists').textContent = s.exists;
@@ -1015,7 +1041,9 @@
         function loadFiles() {
             const search = document.getElementById('search-input').value;
             const sortVal = document.getElementById('sort-select').value;
-            const [sort_by, sort_order] = sortVal.split('_');
+            const idx = sortVal.lastIndexOf('_');
+            const sort_by = sortVal.substring(0, idx);
+            const sort_order = sortVal.substring(idx + 1);
 
             let params = new URLSearchParams({
                 page: currentPage,
@@ -1032,7 +1060,18 @@
                 renderFiles(data.files);
                 renderPagination(data);
                 document.getElementById('current-count').textContent = `${data.total} 项`;
-                document.getElementById('empty-state').style.display = data.total === 0 ? 'block' : 'none';
+                const emptyState = document.getElementById('empty-state');
+                if (data.total === 0) {
+                    const isSearching = search.trim() !== '';
+                    if (isSearching) {
+                        emptyState.innerHTML = `<div class="icon">🔍</div><h3>未找到匹配的文件</h3><p>请尝试更换搜索关键词</p>`;
+                    } else {
+                        emptyState.innerHTML = `<div class="icon">📂</div><h3>仓库还是空的</h3><p>点击"添加文件"开始管理你的文件吧</p><button class="btn btn-primary" onclick="openAddModal()">＋ 添加第一个文件</button>`;
+                    }
+                    emptyState.style.display = 'block';
+                } else {
+                    emptyState.style.display = 'none';
+                }
             });
         }
 
@@ -1045,24 +1084,28 @@
             }
             container.innerHTML = files.map(f => {
                 const classes = ['file-item'];
-                if (selectedIds.has(f.id)) classes.push('selected');
                 if (!f.file_exists) classes.push('missing');
                 const icon = getFileIcon(f.file_ext);
                 const existsBadge = f.file_exists ? '' : '<span style="font-size:11px;color:#f59e0b">⚠ 文件丢失</span>';
                 return `
-                <div class="${classes.join(' ')}" data-id="${f.id}" onclick="toggleSelect(event, ${f.id})" ondblclick="openFile(${f.id})">
+                <div class="${classes.join(' ')}" data-id="${f.id}" onclick="toggleHighlight(event, ${f.id})" ondblclick="openFile(${f.id})">
                     <div class="file-icon">${icon}</div>
                     <div class="file-info">
-                        <div class="name">${escapeHtml(f.title)} ${existsBadge}</div>
-                        <div class="meta">
-                            <span>${f.file_size_fmt}</span>
-                            <span>${f.file_ext || '无后缀'}</span>
-                            <span class="path-hint" title="${escapeHtml(f.file_path)}">${escapeHtml(f.file_path)}</span>
-                            <span>${f.created_at}</span>
+                        <div class="name">
+                            ${escapeHtml(f.title)} <span style="color:var(--text-muted);font-weight:400">${(f.file_ext || '').replace('.', '')}</span> ${existsBadge}
                         </div>
                     </div>
-                    ${renderStars(f.rating)}
+                    <div class="file-tags">
+                        <select class="read-status-select status-${f.read_status || 'unread'}" onchange="event.stopPropagation();updateReadStatus(${f.id}, this)">
+                            <option value="unread" ${(f.read_status || 'unread') === 'unread' ? 'selected' : ''}>未阅读</option>
+                            <option value="reading" ${f.read_status === 'reading' ? 'selected' : ''}>在阅读</option>
+                            <option value="read" ${f.read_status === 'read' ? 'selected' : ''}>已阅读</option>
+                        </select>
+                        <span class="year-tag" title="出版时间">📅 ${f.year ? escapeHtml(f.year) : '未设置'}</span>
+                        <span class="author-tag" title="作者">✍️ ${f.author ? escapeHtml(f.author) : '未设置'}</span>
+                    </div>
                     <div class="file-actions">
+                        <button class="btn-icon fav${f.favorite ? ' active' : ''}" title="${f.favorite ? '取消收藏' : '收藏'}" onclick="event.stopPropagation();toggleFavorite(${f.id})">${f.favorite ? '⭐' : '☆'}</button>
                         <button class="btn-icon" title="打开文件" onclick="event.stopPropagation();openFile(${f.id})">📂</button>
                         <button class="btn-icon" title="定位文件" onclick="event.stopPropagation();locateFile(${f.id})">📁</button>
                         <button class="btn-icon" title="编辑" onclick="event.stopPropagation();showEditModal(${f.id})">✏️</button>
@@ -1081,10 +1124,6 @@
             }
             html += `<button ${data.page === data.total_pages ? 'disabled' : ''} onclick="goToPage(${data.page + 1})">下一页 ›</button>`;
             pag.innerHTML = html;
-        }
-
-        function renderStars(r) {
-            return `<div style="color:#f59e0b;font-size:14px;flex-shrink:0">${'★'.repeat(r)}${'☆'.repeat(5-r)}</div>`;
         }
 
         function getFileIcon(ext) {
@@ -1111,8 +1150,7 @@
         function openAddModal() {
             batchFiles = [];
             updateBatchFileList();
-            loadBatchCategoryOptions();
-            document.getElementById('batch-notes').value = '';
+            loadBatchCategoryOptions(currentCategory);
             document.getElementById('batch-modal-overlay').classList.add('show');
         }
 
@@ -1126,9 +1164,8 @@
                 if (!f) return;
                 document.getElementById('file-path').value = f.file_path;
                 document.getElementById('file-title').value = f.title;
-                document.getElementById('file-notes').value = f.notes || '';
-                rating = f.rating || 0;
-                updateStars();
+                document.getElementById('file-author').value = f.author || '';
+                document.getElementById('file-year').value = f.year || '';
                 loadCategoryOptions(f.category_id);
                 document.getElementById('modal-overlay').classList.add('show');
             });
@@ -1152,53 +1189,42 @@
             const id = document.getElementById('file-id').value;
             const payload = {
                 title: document.getElementById('file-title').value.trim(),
+                file_path: document.getElementById('file-path').value.trim(),
+                author: document.getElementById('file-author').value.trim(),
+                year: document.getElementById('file-year').value.trim(),
                 category_id: document.getElementById('file-category').value || null,
-                notes: document.getElementById('file-notes').value.trim(),
-                rating: rating,
             };
 
             fetch(`/api/files/${id}`, {
                 method: 'PUT',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify(payload),
-            }).then(r => r.json()).then(data => {
+            }).then(async r => {
+                const data = await r.json().catch(() => ({}));
                 if (r.ok) {
                     closeModal();
                     loadFiles();
                     loadStats();
                     loadCategories();
-                    showToast(data.message || '操作成功', 'success');
+                    showToast(data.message || '保存成功', 'success');
                 } else {
-                    showToast(data.error || '操作失败', 'error');
+                    showToast(data.error || '保存失败', 'error');
                 }
+            }).catch(() => {
+                showToast('保存失败，请重启应用后重试', 'error');
             });
         }
 
         function deleteFile(id) {
-            if (!confirm('确定要将此文件从仓库中移除吗？\n\n⚠️ 这不会删除你硬盘上的源文件。')) return;
-            fetch(`/api/files/${id}`, { method: 'DELETE' }).then(r => r.json()).then(data => {
-                loadFiles();
-                loadStats();
-                loadCategories();
-                showToast(data.message, 'success');
-            });
-        }
-
-        function batchDelete() {
-            if (selectedIds.size === 0) return;
-            if (!confirm(`确定要移除选中的 ${selectedIds.size} 条记录吗？\n\n⚠️ 不会删除源文件。`)) return;
-            fetch('/api/files/batch-delete', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ ids: Array.from(selectedIds) }),
-            }).then(r => r.json()).then(data => {
-                selectedIds.clear();
-                updateSelectionBar();
-                loadFiles();
-                loadStats();
-                loadCategories();
-                showToast(data.message, 'success');
-            });
+            showConfirm('确认移出仓库', '确定', () => {
+                    fetch(`/api/files/${id}`, { method: 'DELETE' }).then(r => r.json()).then(data => {
+                        loadFiles();
+                        loadStats();
+                        loadCategories();
+                        showToast(data.message, 'success');
+                    });
+                }
+            );
         }
 
         function openFile(id) {
@@ -1223,31 +1249,45 @@
             });
         }
 
-        // ========== Selection ==========
-        function toggleSelect(event, id) {
-            if (event.target.closest('.file-actions') || event.target.closest('button')) return;
-            if (selectedIds.has(id)) {
-                selectedIds.delete(id);
-            } else {
-                selectedIds.add(id);
+        async function toggleFavorite(id) {
+            try {
+                const resp = await fetch(`/api/files/${id}/favorite`, { method: 'POST' });
+                const data = await resp.json();
+                if (resp.ok) {
+                    // 更新当前卡片上的星号，无需整页刷新
+                    const item = document.querySelector(`.file-item[data-id="${id}"]`);
+                    if (item) {
+                        const btn = item.querySelector('.btn-icon.fav');
+                        if (btn) {
+                            btn.classList.toggle('active', data.favorite);
+                            btn.title = data.favorite ? '取消收藏' : '收藏';
+                            btn.textContent = data.favorite ? '⭐' : '☆';
+                        }
+                    }
+                } else {
+                    showToast(data.error || '操作失败', 'error');
+                }
+            } catch (err) {
+                showToast('操作失败', 'error');
             }
-            updateSelectionBar();
-            // Toggle visual
-            const item = document.querySelector(`.file-item[data-id="${id}"]`);
-            if (item) item.classList.toggle('selected', selectedIds.has(id));
         }
 
-        function clearSelection() {
-            selectedIds.clear();
-            updateSelectionBar();
-            document.querySelectorAll('.file-item.selected').forEach(el => el.classList.remove('selected'));
-        }
-
-        function updateSelectionBar() {
-            const bar = document.getElementById('selection-bar');
-            const count = document.getElementById('selected-count');
-            count.textContent = selectedIds.size;
-            bar.classList.toggle('show', selectedIds.size > 0);
+        async function updateReadStatus(id, selectEl) {
+            try {
+                const status = selectEl.value;
+                selectEl.className = `read-status-select status-${status}`;
+                const resp = await fetch(`/api/files/${id}/read-status`, {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ read_status: status }),
+                });
+                const data = await resp.json();
+                if (!resp.ok) {
+                    showToast(data.error || '状态更新失败', 'error');
+                }
+            } catch (err) {
+                showToast('状态更新失败', 'error');
+            }
         }
 
         function filterByCategory(id, name) {
@@ -1266,47 +1306,9 @@
             currentPage = p;
             loadFiles();
             document.querySelector('.file-list-container').scrollTop = 0;
-            clearSelection();
         }
 
-        // ========== Export/Import ==========
-        function exportData() {
-            fetch('/api/export').then(r => r.json()).then(data => {
-                const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
-                const url = URL.createObjectURL(blob);
-                const a = document.createElement('a');
-                a.href = url;
-                a.download = `file-warehouse-export-${new Date().toISOString().slice(0,10)}.json`;
-                a.click();
-                URL.revokeObjectURL(url);
-                showToast('导出成功', 'success');
-            });
-        }
 
-        function importData(input) {
-            const file = input.files[0];
-            if (!file) return;
-            const reader = new FileReader();
-            reader.onload = () => {
-                try {
-                    const data = JSON.parse(reader.result);
-                    fetch('/api/import', {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify(data),
-                    }).then(r => r.json()).then(res => {
-                        showToast(res.message, 'success');
-                        loadFiles();
-                        loadStats();
-                        loadCategories();
-                    });
-                } catch {
-                    showToast('文件格式错误', 'error');
-                }
-            };
-            reader.readAsText(file);
-            input.value = '';
-        }
 
         // ========== Search ==========
         let searchTimeout;
@@ -1316,6 +1318,13 @@
         }
 
         // ========== Toast ==========
+        function toggleHighlight(event, id) {
+            if (event.target.closest('.file-actions') || event.target.closest('button') || event.target.closest('select')) return;
+            if (document.querySelector(`.file-item[data-id="${id}"]`).classList.contains('highlighted')) return;
+            document.querySelectorAll('.file-item.highlighted').forEach(el => el.classList.remove('highlighted'));
+            document.querySelector(`.file-item[data-id="${id}"]`).classList.add('highlighted');
+        }
+
         function showToast(msg, type) {
             const toast = document.createElement('div');
             toast.className = `toast ${type}`;
@@ -1324,12 +1333,6 @@
             setTimeout(() => { toast.remove(); }, 3000);
         }
 
-        function updateStars(hover) {
-            const val = hover !== undefined ? hover : rating;
-            document.querySelectorAll('#rating-stars .star').forEach(s => {
-                s.classList.toggle('active', parseInt(s.dataset.r) <= val);
-            });
-        }
     </script>
 </body>
 </html>
