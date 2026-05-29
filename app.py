@@ -12,9 +12,80 @@ import subprocess
 import platform
 import hashlib
 import threading
+import ctypes
 from datetime import datetime, timedelta
 from pathlib import Path
 from flask import Flask, render_template, request, jsonify, g
+
+# ---------- Windows 任务栏图标支持 ----------
+
+def _setup_windows_icon(icon_path, window_title):
+    """Windows 特有：设置任务栏和窗口图标（pywebview 在 Win 上不支持 icon 参数）"""
+    if platform.system() != 'Windows':
+        return
+
+    # 1. 设置 AppUserModelID，防止任务栏显示空白文档图标
+    try:
+        ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID(
+            'filewarehouse.dxm.app.v1'
+        )
+    except Exception:
+        pass
+
+    # 2. 在后台线程中给窗口设置图标
+    def _set_icon():
+        import time
+        time.sleep(0.8)  # 等待 pywebview 窗口创建
+
+        # 查找窗口句柄
+        hwnd = None
+        try:
+            # 方式1：EnumWindows 枚举所有可见窗口
+            WNDENUMPROC = ctypes.WINFUNCTYPE(ctypes.c_bool, ctypes.c_void_p, ctypes.c_void_p)
+            _found = []
+
+            def _enum_callback(h, _lp):
+                if ctypes.windll.user32.IsWindowVisible(h):
+                    length = ctypes.windll.user32.GetWindowTextLengthW(h)
+                    if length > 0:
+                        buf = ctypes.create_unicode_buffer(length + 1)
+                        ctypes.windll.user32.GetWindowTextW(h, buf, length + 1)
+                        if window_title in buf.value:
+                            _found.append(h)
+                            return False  # 停止枚举
+                return True
+
+            ctypes.windll.user32.EnumWindows(WNDENUMPROC(_enum_callback), 0)
+            if _found:
+                hwnd = _found[0]
+
+            # 方式2：FindWindow 兜底
+            if not hwnd:
+                hwnd = ctypes.windll.user32.FindWindowW(None, window_title)
+
+        except Exception:
+            pass
+
+        if not hwnd:
+            return  # 窗口未找到，放弃
+
+        # 3. 加载并设置图标
+        try:
+            IMAGE_ICON = 1
+            LR_LOADFROMFILE = 0x0010
+            hicon = ctypes.windll.user32.LoadImageW(
+                0, icon_path, IMAGE_ICON, 0, 0, LR_LOADFROMFILE
+            )
+            if hicon:
+                WM_SETICON = 0x0080
+                ICON_SMALL = 0  # 标题栏图标
+                ICON_BIG = 1    # 任务栏图标（Alt+Tab）
+                ctypes.windll.user32.SendMessageW(hwnd, WM_SETICON, ICON_SMALL, hicon)
+                ctypes.windll.user32.SendMessageW(hwnd, WM_SETICON, ICON_BIG, hicon)
+        except Exception:
+            pass
+
+    threading.Thread(target=_set_icon, daemon=True).start()
 
 # 处理 PyInstaller 打包后的路径
 if getattr(sys, 'frozen', False):
@@ -251,10 +322,16 @@ def get_files():
 
     total = db.execute(f"SELECT COUNT(*) FROM files WHERE {where}", params).fetchone()[0]
     offset = (page - 1) * per_page
+    # 阅读状态使用自定义排序：在阅读 > 未阅读 > 已阅读（不受 sort_order 影响）
+    if sort_by == 'read_status':
+        order_clause = "CASE f.read_status WHEN 'reading' THEN 1 WHEN 'unread' THEN 2 WHEN 'read' THEN 3 ELSE 4 END ASC"
+    else:
+        order_clause = f"{sort_by} {sort_order}"
+
     rows = db.execute(
         f"SELECT f.*, c.name as category_name, c.color as category_color "
         f"FROM files f LEFT JOIN categories c ON f.category_id = c.id "
-        f"WHERE {where} ORDER BY {sort_by} {sort_order} LIMIT ? OFFSET ?",
+        f"WHERE {where} ORDER BY {order_clause} LIMIT ? OFFSET ?",
         params + [per_page, offset]
     ).fetchall()
 
@@ -624,6 +701,17 @@ if __name__ == '__main__':
     # 初始化数据库
     init_db()
 
+    # 图标路径（兼容 PyInstaller 打包）
+    def get_icon_path():
+        if getattr(sys, 'frozen', False):
+            # PyInstaller 打包后，icon 在 sys._MEIPASS 中
+            return os.path.join(sys._MEIPASS, 'icon.ico')
+        else:
+            return os.path.join(BASE_DIR, 'icon.ico')
+
+    icon_path = get_icon_path()
+    window_title = '个人文件仓库管理系统'
+
     # 在后台线程启动 Flask
     def run_flask():
         app.run(host='127.0.0.1', port=5000, debug=False)
@@ -636,11 +724,15 @@ if __name__ == '__main__':
 
     # 创建原生桌面窗口
     webview.create_window(
-        title='个人文件仓库管理系统 - dxm',
+        title=window_title,
         url='http://127.0.0.1:5000',
         width=1280,
         height=800,
         min_size=(900, 600),
         text_select=True,
     )
-    webview.start()
+
+    # Windows: 通过 Win32 API 设置任务栏图标（pywebview 的 icon 参数在 Win 上无效）
+    _setup_windows_icon(icon_path, window_title)
+
+    webview.start(icon=icon_path)
