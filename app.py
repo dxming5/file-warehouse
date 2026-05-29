@@ -12,80 +12,9 @@ import subprocess
 import platform
 import hashlib
 import threading
-import ctypes
 from datetime import datetime, timedelta
 from pathlib import Path
 from flask import Flask, render_template, request, jsonify, g
-
-# ---------- Windows 任务栏图标支持 ----------
-
-def _setup_windows_icon(icon_path, window_title):
-    """Windows 特有：设置任务栏和窗口图标（pywebview 在 Win 上不支持 icon 参数）"""
-    if platform.system() != 'Windows':
-        return
-
-    # 1. 设置 AppUserModelID，防止任务栏显示空白文档图标
-    try:
-        ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID(
-            'filewarehouse.dxm.app.v1'
-        )
-    except Exception:
-        pass
-
-    # 2. 在后台线程中给窗口设置图标
-    def _set_icon():
-        import time
-        time.sleep(0.8)  # 等待 pywebview 窗口创建
-
-        # 查找窗口句柄
-        hwnd = None
-        try:
-            # 方式1：EnumWindows 枚举所有可见窗口
-            WNDENUMPROC = ctypes.WINFUNCTYPE(ctypes.c_bool, ctypes.c_void_p, ctypes.c_void_p)
-            _found = []
-
-            def _enum_callback(h, _lp):
-                if ctypes.windll.user32.IsWindowVisible(h):
-                    length = ctypes.windll.user32.GetWindowTextLengthW(h)
-                    if length > 0:
-                        buf = ctypes.create_unicode_buffer(length + 1)
-                        ctypes.windll.user32.GetWindowTextW(h, buf, length + 1)
-                        if window_title in buf.value:
-                            _found.append(h)
-                            return False  # 停止枚举
-                return True
-
-            ctypes.windll.user32.EnumWindows(WNDENUMPROC(_enum_callback), 0)
-            if _found:
-                hwnd = _found[0]
-
-            # 方式2：FindWindow 兜底
-            if not hwnd:
-                hwnd = ctypes.windll.user32.FindWindowW(None, window_title)
-
-        except Exception:
-            pass
-
-        if not hwnd:
-            return  # 窗口未找到，放弃
-
-        # 3. 加载并设置图标
-        try:
-            IMAGE_ICON = 1
-            LR_LOADFROMFILE = 0x0010
-            hicon = ctypes.windll.user32.LoadImageW(
-                0, icon_path, IMAGE_ICON, 0, 0, LR_LOADFROMFILE
-            )
-            if hicon:
-                WM_SETICON = 0x0080
-                ICON_SMALL = 0  # 标题栏图标
-                ICON_BIG = 1    # 任务栏图标（Alt+Tab）
-                ctypes.windll.user32.SendMessageW(hwnd, WM_SETICON, ICON_SMALL, hicon)
-                ctypes.windll.user32.SendMessageW(hwnd, WM_SETICON, ICON_BIG, hicon)
-        except Exception:
-            pass
-
-    threading.Thread(target=_set_icon, daemon=True).start()
 
 # 处理 PyInstaller 打包后的路径
 if getattr(sys, 'frozen', False):
@@ -257,10 +186,10 @@ def verify_files(db):
 def index():
     return render_template('index.html')
 
-# --- 文件夹分类辅助 ---
+# --- 分类辅助 ---
 
 def get_or_create_folder_category(db, file_path):
-    """根据文件所在父文件夹自动创建/匹配分类"""
+    """根据文件所在父目录自动创建/匹配分类"""
     try:
         parent = os.path.basename(os.path.dirname(file_path))
         if not parent:
@@ -295,6 +224,7 @@ def get_files():
     sort_by = request.args.get('sort_by', 'created_at')
     sort_order = request.args.get('sort_order', 'desc')
     file_exists = request.args.get('file_exists', type=int)
+    favorite = request.args.get('favorite', type=int)
 
     allowed_sorts = ['title', 'created_at', 'updated_at', 'file_name', 'file_ext', 'author', 'year', 'read_status']
     if sort_by not in allowed_sorts:
@@ -306,9 +236,9 @@ def get_files():
     params = []
 
     if search:
-        conditions.append("title LIKE ?")
+        conditions.append("(title LIKE ? OR file_name LIKE ? OR file_path LIKE ? OR tags LIKE ?)")
         like = f"%{search}%"
-        params.append(like)
+        params.extend([like, like, like, like])
 
     if category_id:
         conditions.append("category_id = ?")
@@ -318,20 +248,21 @@ def get_files():
         conditions.append("file_exists = ?")
         params.append(file_exists)
 
+    if favorite is not None:
+        conditions.append("favorite = ?")
+        params.append(favorite)
+
+    if request.args.get('uncategorized', type=int) == 1:
+        conditions.append("category_id IS NULL")
+
     where = " AND ".join(conditions)
 
     total = db.execute(f"SELECT COUNT(*) FROM files WHERE {where}", params).fetchone()[0]
     offset = (page - 1) * per_page
-    # 阅读状态使用自定义排序：在阅读 > 未阅读 > 已阅读（不受 sort_order 影响）
-    if sort_by == 'read_status':
-        order_clause = "CASE f.read_status WHEN 'reading' THEN 1 WHEN 'unread' THEN 2 WHEN 'read' THEN 3 ELSE 4 END ASC"
-    else:
-        order_clause = f"{sort_by} {sort_order}"
-
     rows = db.execute(
         f"SELECT f.*, c.name as category_name, c.color as category_color "
         f"FROM files f LEFT JOIN categories c ON f.category_id = c.id "
-        f"WHERE {where} ORDER BY {order_clause} LIMIT ? OFFSET ?",
+        f"WHERE {where} ORDER BY {sort_by} {sort_order} LIMIT ? OFFSET ?",
         params + [per_page, offset]
     ).fetchall()
 
@@ -387,7 +318,7 @@ def add_file():
     info = get_file_info(abs_path)
     title = data.get('title', '').strip() or info['stem']
     category_id = data.get('category_id') or None
-    # 如果启用自动文件夹分类且未指定分类
+    # 如果启用自动分类且未指定分类
     if data.get('auto_category') and not category_id:
         category_id = get_or_create_folder_category(db, abs_path)
     tags = data.get('tags', '').strip()
@@ -406,12 +337,12 @@ def add_file():
 
 @app.route('/api/files/batch-add', methods=['POST'])
 def batch_add_files():
-    """批量添加文件（支持拖拽入库 + 手动选择/自动按文件夹分类）"""
+    """批量添加文件（支持拖拽入库 + 手动选择/自动按分类归类）"""
     db = get_db()
     data = request.get_json()
     file_paths = data.get('file_paths', [])
     auto_category = data.get('auto_category', False)
-    category_id = data.get('category_id') or None  # 手动选择的文件夹
+    category_id = data.get('category_id') or None  # 手动选择的分类
     base_tags = data.get('tags', '').strip()
     base_author = data.get('author', '').strip()
     base_year = data.get('year', '').strip()
@@ -506,6 +437,19 @@ def delete_file(file_id):
     db.commit()
 
     return jsonify({'message': '已从仓库移除（源文件未删除）'})
+
+@app.route('/api/files/batch-delete', methods=['POST'])
+def batch_delete_files():
+    """批量删除"""
+    db = get_db()
+    data = request.get_json()
+    ids = data.get('ids', [])
+    if not ids:
+        return jsonify({'error': '请选择要删除的记录'}), 400
+    placeholders = ','.join('?' * len(ids))
+    db.execute(f"DELETE FROM files WHERE id IN ({placeholders})", ids)
+    db.commit()
+    return jsonify({'message': f'已移除 {len(ids)} 条记录'})
 
 @app.route('/api/files/<int:file_id>/read-status', methods=['PUT'])
 def update_read_status(file_id):
@@ -653,6 +597,8 @@ def get_stats():
     total = db.execute("SELECT COUNT(*) FROM files").fetchone()[0]
     exists = db.execute("SELECT COUNT(*) FROM files WHERE file_exists=1").fetchone()[0]
     missing = total - exists
+    favorites = db.execute("SELECT COUNT(*) FROM files WHERE favorite=1").fetchone()[0]
+    uncategorized = db.execute("SELECT COUNT(*) FROM files WHERE category_id IS NULL").fetchone()[0]
     cats = db.execute(
         "SELECT c.name, c.color, COUNT(f.id) as cnt FROM categories c "
         "LEFT JOIN files f ON f.category_id = c.id GROUP BY c.id ORDER BY c.id"
@@ -665,6 +611,8 @@ def get_stats():
         'total': total,
         'exists': exists,
         'missing': missing,
+        'favorites': favorites,
+        'uncategorized': uncategorized,
         'recent_7d': recent,
         'categories': [{'name': c['name'], 'color': c['color'], 'count': c['cnt']} for c in cats],
     })
@@ -677,18 +625,30 @@ def get_stats():
 @app.route('/api/browse-files', methods=['POST'])
 def browse_files():
     """打开原生文件选择对话框（多选），返回选中文件的真实路径"""
-    import tkinter as tk
-    from tkinter import filedialog
-    root = tk.Tk()
-    root.withdraw()
-    root.attributes('-topmost', True)
-    file_paths = filedialog.askopenfilenames(title='选择要添加的文件')
-    root.destroy()
-    result = []
-    for fp in file_paths:
-        info = get_file_info(fp)
-        result.append({'path': to_relative_path(fp), 'name': info['name'], 'ext': info['ext']})
-    return jsonify({'files': result})
+    try:
+        import tkinter as tk
+        from tkinter import filedialog
+        
+        root = tk.Tk()
+        root.withdraw()
+        root.attributes('-topmost', True)
+        file_paths = filedialog.askopenfilenames(title='选择要添加的文件')
+        root.destroy()
+        
+        result = []
+        for fp in file_paths:
+            info = get_file_info(fp)
+            result.append({
+                'path': to_relative_path(fp), 
+                'name': info['name'], 
+                'size': info['size'], 
+                'ext': info['ext']
+            })
+        return jsonify({'files': result})
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        return jsonify({'error': f'文件选择失败: {str(e)}'}), 500
 
 
 
@@ -700,17 +660,6 @@ if __name__ == '__main__':
 
     # 初始化数据库
     init_db()
-
-    # 图标路径（兼容 PyInstaller 打包）
-    def get_icon_path():
-        if getattr(sys, 'frozen', False):
-            # PyInstaller 打包后，icon 在 sys._MEIPASS 中
-            return os.path.join(sys._MEIPASS, 'icon.ico')
-        else:
-            return os.path.join(BASE_DIR, 'icon.ico')
-
-    icon_path = get_icon_path()
-    window_title = '个人文件仓库管理系统'
 
     # 在后台线程启动 Flask
     def run_flask():
@@ -724,15 +673,11 @@ if __name__ == '__main__':
 
     # 创建原生桌面窗口
     webview.create_window(
-        title=window_title,
+        title='个人文件仓库管理系统 - dxm',
         url='http://127.0.0.1:5000',
         width=1280,
         height=800,
         min_size=(900, 600),
         text_select=True,
     )
-
-    # Windows: 通过 Win32 API 设置任务栏图标（pywebview 的 icon 参数在 Win 上无效）
-    _setup_windows_icon(icon_path, window_title)
-
-    webview.start(icon=icon_path)
+    webview.start()

@@ -28,6 +28,12 @@
             --radius: 12px;
             --radius-sm: 8px;
             --transition: 200ms ease;
+            --col-icon: 42px;
+            --col-title: 200px;
+            --col-format: 90px;
+            --col-author: 90px;
+            --col-read: 90px;
+            --col-year: 90px;
         }
 
         * { margin: 0; padding: 0; box-sizing: border-box; }
@@ -113,26 +119,7 @@
             width: 8px; height: 8px; border-radius: 50%;
             flex-shrink: 0;
         }
-        .nav-item .cat-actions {
-            display: none;
-            margin-left: auto;
-            gap: 2px;
-            align-items: center;
-        }
-        .nav-item:hover .cat-actions { display: flex; }
-        .nav-item:hover .badge { display: none; }
-        .cat-actions button {
-            background: none;
-            border: none;
-            cursor: pointer;
-            font-size: 12px;
-            padding: 2px 4px;
-            border-radius: 3px;
-            color: var(--text-muted);
-            transition: var(--transition);
-        }
-        .cat-actions button:hover { background: #e5e7eb; color: var(--text); }
-        .cat-actions button.del:hover { background: var(--danger-light); color: var(--danger); }
+
 
         .sidebar-footer {
             padding: 12px 20px;
@@ -206,29 +193,19 @@
             box-shadow: 0 0 0 3px rgba(79,70,229,.12);
             background-color: #fff;
         }
-        .filter-select {
-            padding: 9px 14px;
-            border: 1px solid var(--border);
-            border-radius: var(--radius-sm);
-            font-size: 14px;
-            background: #f9fafb;
-            cursor: pointer;
-            color: var(--text-secondary);
-        }
-        .filter-select:focus { outline: none; border-color: var(--primary); }
-
         /* ===== 文件列表 ===== */
         .file-list-container {
             flex: 1;
-            overflow-y: auto;
+            overflow: auto;
             padding: 16px 24px;
+            min-width: 0;
         }
-        .file-list { display: flex; flex-direction: column; gap: 2px; }
+        .file-list { display: flex; flex-direction: column; gap: 2px; min-width: max-content; }
 
         .file-item {
             display: flex;
             align-items: center;
-            gap: 10px;
+            gap: 0;
             padding: 6px 14px;
             background: var(--card-bg);
             border: 1px solid var(--border);
@@ -250,13 +227,52 @@
             box-shadow: 0 0 0 2px rgba(79,70,229,.2);
         }
 
+        /* ===== 文件列表表头 ===== */
+        .file-list-header {
+            display: flex;
+            align-items: center;
+            gap: 0;
+            padding: 8px 14px;
+            font-size: 14px;
+            font-weight: 600;
+            color: var(--text-muted);
+            background: #f9fafb;
+            border-bottom: 2px solid var(--border);
+            position: sticky;
+            top: 0;
+            z-index: 5;
+        }
+        .file-list-header .h-icon { width: var(--col-icon); flex-shrink: 0; }
+        .file-list-header .h-title { width: var(--col-title); flex-shrink: 0; padding-right: 10px; cursor: pointer; user-select: none; }
+        .file-list-header .h-title:hover { color: var(--primary); }
+        .file-list-header .h-format { width: var(--col-format); flex-shrink: 0; text-align: center; cursor: pointer; user-select: none; }
+        .file-list-header .h-format:hover { color: var(--primary); }
+        .file-list-header .h-author { width: var(--col-author); flex-shrink: 0; text-align: center; cursor: pointer; user-select: none; }
+        .file-list-header .h-author:hover { color: var(--primary); }
+        .file-list-header .h-read { width: var(--col-read); flex-shrink: 0; text-align: center; cursor: pointer; user-select: none; }
+        .file-list-header .h-read:hover { color: var(--primary); }
+        .file-list-header .h-year { width: var(--col-year); flex-shrink: 0; text-align: center; cursor: pointer; user-select: none; }
+        .file-list-header .h-year:hover { color: var(--primary); }
+        .sort-arrow { font-size: 12px; margin-left: 2px; opacity: 0.4; }
+        .file-list-header .active-sort { color: var(--primary); }
+        .file-list-header .active-sort .sort-arrow { opacity: 1; }
+        .col-resizer {
+            width: 14px;
+            flex-shrink: 0;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: #d1d5db;
+            user-select: none;
+            font-size: 14px;
+        }
         .file-icon {
             font-size: 22px;
             flex-shrink: 0;
-            width: 32px;
+            width: 42px;
             text-align: center;
         }
-        .file-info { flex: 1; min-width: 0; }
+        .file-info { width: var(--col-title); flex-shrink: 0; min-width: 0; }
         .file-info .name {
             font-size: 14px;
             font-weight: 600;
@@ -268,26 +284,22 @@
             gap: 8px;
         }
         .author-tag {
-            font-size: 12px;
-            font-weight: 400;
+            font-size: 14px;
+            font-weight: 600;
             color: var(--text-secondary);
-            background: #f0f3ff;
-            border: 1px solid #d4dafc;
-            border-radius: 10px;
-            padding: 1px 8px;
             white-space: nowrap;
             flex-shrink: 0;
             cursor: default;
+            width: var(--col-author);
+            overflow: hidden;
+            text-overflow: ellipsis;
+            text-align: center;
         }
         .author-tag.has-more {
             cursor: pointer;
             user-select: none;
         }
-        .author-tag.has-more::after {
-            content: ' ▾';
-            font-size: 10px;
-            color: var(--text-muted);
-        }
+
         .author-dropdown {
             position: relative;
             display: inline-flex;
@@ -313,7 +325,7 @@
         }
         .author-option {
             padding: 6px 12px;
-            font-size: 12px;
+            font-size: 14px;
             cursor: pointer;
             white-space: nowrap;
             color: var(--text);
@@ -330,24 +342,43 @@
             border-radius: 0 0 8px 8px;
         }
         .year-tag {
-            font-size: 12px;
-            font-weight: 400;
+            font-size: 14px;
+            font-weight: 600;
             color: var(--text-secondary);
-            background: #f0fdf4;
-            border: 1px solid #bbf7d0;
-            border-radius: 10px;
-            padding: 1px 8px;
             white-space: nowrap;
             flex-shrink: 0;
+            display: inline-block;
+            width: var(--col-year);
+            text-align: center;
+        }
+        .format-tag {
+            font-size: 14px;
+            font-weight: 600;
+            color: var(--text-secondary);
+            white-space: nowrap;
+            flex-shrink: 0;
+            display: inline-block;
+            width: var(--col-format);
+            text-align: center;
         }
         .read-status-select {
-            font-size: 12px;
-            padding: 1px 6px;
+            font-size: 14px;
+            border: none;
+            background: transparent;
+            color: var(--text-secondary);
+            cursor: pointer;
+            outline: none;
+            appearance: none;
+            -webkit-appearance: none;
+            width: var(--col-read);
+            flex-shrink: 0;
+            text-align: center;
+            text-align-last: center;
         }
-        .read-status-select:focus { border-color: var(--primary); }
-        .read-status-select.status-unread { background: #f3f4f6; color: var(--text-muted); }
-        .read-status-select.status-reading { background: #fffbeb; color: #d97706; border-color: #fcd34d; }
-        .read-status-select.status-read { background: #ecfdf5; color: #059669; border-color: #a7f3d0; }
+        .read-status-select:focus { outline: none; }
+        .read-status-select.status-unread { color: var(--text-muted); }
+        .read-status-select.status-reading { color: #d97706; }
+        .read-status-select.status-read { color: #059669; }
         .read-status-select option { background: #fff; color: var(--text); }
         .file-info .meta {
             font-size: 12px;
@@ -364,13 +395,15 @@
             max-width: 300px;
         }
 
-        .file-actions { display: flex; gap: 4px; flex-shrink: 0; }
         .file-tags {
             display: flex;
             align-items: center;
-            gap: 6px;
+            gap: 0;
             flex-shrink: 0;
-            margin-left: auto;
+        }
+        .tag-gap {
+            width: 14px;
+            flex-shrink: 0;
         }
         .btn-icon {
             width: 26px; height: 26px;
@@ -387,9 +420,44 @@
         }
         .btn-icon:hover { background: #f3f4f6; color: var(--text); }
         .btn-icon.danger:hover { background: var(--danger-light); color: var(--danger); }
-        .btn-icon.fav { font-size: 20px; }
+        .btn-icon.fav { line-height: 1; }
+        .btn-icon.fav svg.fav-star { width: 17px; height: 17px; fill: none; stroke: currentColor; stroke-width: 1.8; }
+        .btn-icon.fav.active svg.fav-star { fill: #f59e0b; stroke: #f59e0b; }
         .btn-icon.fav.active { color: #f59e0b; }
         .btn-icon.fav:hover { background: #fffbeb; color: #f59e0b; }
+
+        /* ===== 右键菜单 ===== */
+        .context-menu {
+            position: fixed;
+            z-index: 100;
+            min-width: 150px;
+            background: #fff;
+            border: 1px solid var(--border);
+            border-radius: var(--radius-sm);
+            box-shadow: var(--shadow-lg);
+            padding: 4px 0;
+            display: none;
+        }
+        .context-menu.show { display: block; }
+        .context-menu-item {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            padding: 8px 16px;
+            font-size: 13px;
+            color: var(--text);
+            cursor: pointer;
+            transition: background var(--transition);
+            white-space: nowrap;
+        }
+        .context-menu-item:hover { background: var(--primary-light); color: var(--primary); }
+        .context-menu-item.danger { color: var(--danger); }
+        .context-menu-item.danger:hover { background: var(--danger-light); }
+        .context-menu-divider {
+            height: 1px;
+            background: var(--border);
+            margin: 4px 0;
+        }
 
         .btn {
             padding: 8px 16px;
@@ -637,11 +705,14 @@
                 <div class="nav-item" data-filter="missing">
                     ⚠️ 已丢失 <span class="badge" id="badge-missing">0</span>
                 </div>
+                <div class="nav-item" data-filter="favorites">
+                    ⭐ 收藏 <span class="badge" id="badge-favorites">0</span>
+                </div>
             </div>
             <div class="nav-section">
                 <div class="nav-section-title">
-                    文件夹
-                    <button class="add-cat-btn" onclick="showAddCategoryModal()" title="新建文件夹">＋</button>
+                    分类
+                    <button class="add-cat-btn" onclick="showAddCategoryModal()" title="新建分类">＋</button>
                 </div>
                 <div id="category-list"></div>
             </div>
@@ -666,21 +737,19 @@
         <!-- Search -->
         <div class="search-bar">
             <input type="text" class="search-input" id="search-input" placeholder="搜索标题名..." oninput="debounceSearch()">
-            <select class="filter-select" id="sort-select" onchange="loadFiles()">
-                <option value="created_at_desc">最近添加</option>
-                <option value="title_asc">名称 A-Z</option>
-                <option value="title_desc">名称 Z-A</option>
-                <option value="author_asc">作者 A-Z</option>
-                <option value="author_desc">作者 Z-A</option>
-                <option value="year_desc">出版时间 ↓</option>
-                <option value="year_asc">出版时间 ↑</option>
-                <option value="read_status_desc">阅读状态</option>
-            </select>
             <button class="btn btn-secondary btn-sm" onclick="verifyAll()" title="校验所有文件是否存在">🔍 校验</button>
         </div>
 
         <!-- File List -->
         <div class="file-list-container" id="file-list-container">
+            <div class="file-list-header" id="file-list-header" style="display:none">
+                <span class="h-icon"></span>
+                <span class="col-resizer" data-left="icon" data-right="title">|</span><span class="h-title" onclick="toggleSort('title')">标题<span class="sort-arrow"></span></span>
+                <span class="col-resizer" data-left="title" data-right="format">|</span><span class="h-format" onclick="toggleSort('format')">格式<span class="sort-arrow"></span></span>
+                <span class="col-resizer" data-left="format" data-right="author">|</span><span class="h-author" onclick="toggleSort('author')">作者<span class="sort-arrow"></span></span>
+                <span class="col-resizer" data-left="author" data-right="read">|</span><span class="h-read" onclick="toggleSort('read_status')">阅读状态<span class="sort-arrow"></span></span>
+                <span class="col-resizer" data-left="read" data-right="year">|</span><span class="h-year" onclick="toggleSort('year')">出版时间<span class="sort-arrow"></span></span>
+            </div>
             <div class="file-list" id="file-list"></div>
             <div class="empty-state" id="empty-state" style="display:none">
                 <div class="icon">📂</div>
@@ -693,6 +762,21 @@
         <!-- Pagination -->
         <div class="pagination" id="pagination"></div>
     </main>
+
+    <!-- 右键菜单（文件） -->
+    <div class="context-menu" id="context-menu">
+        <div class="context-menu-item" onclick="ctxOpenFile()">📂 打开文件</div>
+        <div class="context-menu-item" onclick="ctxLocateFile()">📁 定位文件</div>
+        <div class="context-menu-divider"></div>
+        <div class="context-menu-item" onclick="ctxEditFile()">✏️ 编辑</div>
+        <div class="context-menu-item danger" onclick="ctxDeleteFile()">🗑️ 移出仓库</div>
+    </div>
+
+    <!-- 右键菜单（分类） -->
+    <div class="context-menu" id="cat-context-menu">
+        <div class="context-menu-item" onclick="ctxEditCategory()">✏️ 编辑分类</div>
+        <div class="context-menu-item danger" onclick="ctxDeleteCategory()">🗑️ 删除分类</div>
+    </div>
 
     <!-- 编辑弹窗 -->
     <div class="modal-overlay" id="modal-overlay">
@@ -755,13 +839,13 @@
         </div>
     </div>
 
-    <!-- 新建/编辑文件夹弹窗 -->
+    <!-- 新建/编辑分类弹窗 -->
     <div class="modal-overlay" id="cat-modal-overlay">
         <div class="modal" style="width:420px">
-            <h3 id="cat-modal-title">📁 新建文件夹</h3>
+            <h3 id="cat-modal-title">📁 新建分类</h3>
             <input type="hidden" id="edit-cat-id" value="">
             <div class="form-group">
-                <label>文件夹名称 *</label>
+                <label>分类名称 *</label>
                 <input type="text" id="new-cat-name" placeholder="如：工作文档、个人项目...">
             </div>
             <div class="form-group">
@@ -803,6 +887,7 @@
         let currentFilter = 'all';
         let currentCategory = null;
         let currentPage = 1;
+        let uncategorizedCount = 0;
         let editingId = null;
         let batchFiles = [];  // { name, path, folder }
         let confirmCallback = null;
@@ -837,8 +922,8 @@
             loadFiles();
             loadStats();
 
-            // Nav clicks
-            document.querySelectorAll('.nav-item[data-filter]').forEach(el => {
+            // Nav clicks - 只处理静态的筛选项（不包括动态生成的未分类）
+            document.querySelectorAll('.nav-item[data-filter]:not([data-filter="uncategorized"])').forEach(el => {
                 el.addEventListener('click', () => {
                     document.querySelectorAll('.nav-item[data-filter]').forEach(e => e.classList.remove('active'));
                     el.classList.add('active');
@@ -869,6 +954,10 @@
             try {
                 const resp = await fetch('/api/browse-files', { method: 'POST' });
                 const data = await resp.json();
+                if (!resp.ok) {
+                    showToast(data.error || '选择文件失败', 'error');
+                    return;
+                }
                 if (data.files && data.files.length > 0) {
                     data.files.forEach(f => {
                         if (!batchFiles.some(bf => bf.path === f.path)) {
@@ -956,9 +1045,9 @@
             }
         }
 
-        // ========== 文件夹（分类）管理 ==========
+        // ========== 分类管理 ==========
         function showAddCategoryModal() {
-            document.getElementById('cat-modal-title').textContent = '📁 新建文件夹';
+            document.getElementById('cat-modal-title').textContent = '📁 新建分类';
             document.getElementById('edit-cat-id').value = '';
             document.getElementById('new-cat-name').value = '';
             document.getElementById('cat-save-btn').textContent = '创建';
@@ -971,7 +1060,7 @@
         }
 
         function editCategory(id, name, color) {
-            document.getElementById('cat-modal-title').textContent = '✏️ 编辑文件夹';
+            document.getElementById('cat-modal-title').textContent = '✏️ 编辑分类';
             document.getElementById('edit-cat-id').value = id;
             document.getElementById('new-cat-name').value = name;
             document.getElementById('cat-save-btn').textContent = '保存';
@@ -1014,7 +1103,7 @@
         async function saveCategory() {
             const editId = document.getElementById('edit-cat-id').value;
             const name = document.getElementById('new-cat-name').value.trim();
-            if (!name) { showToast('请输入文件夹名称', 'error'); return; }
+            if (!name) { showToast('请输入分类名称', 'error'); return; }
             const color = document.getElementById('new-cat-color').value;
 
             const isEdit = !!editId;
@@ -1031,14 +1120,14 @@
                 closeCatModal();
                 loadCategories();
                 loadFiles();
-                showToast(isEdit ? '文件夹更新成功' : '文件夹创建成功', 'success');
+                showToast(isEdit ? '分类更新成功' : '分类创建成功', 'success');
             } else {
                 showToast(data.error || '操作失败', 'error');
             }
         }
 
         async function deleteCategory(id, name) {
-            if (!confirm(`确定要删除文件夹「${name}」吗？\n\n其中的文件将变为"未分类"状态。`)) return;
+            if (!confirm(`确定要删除分类「${name}」吗？\n\n其中的文件将变为"未分类"状态。`)) return;
             const resp = await fetch(`/api/categories/${id}`, { method: 'DELETE' });
             const data = await resp.json();
             if (resp.ok) {
@@ -1061,7 +1150,7 @@
         function loadBatchCategoryOptions(selectedId) {
             fetch('/api/categories').then(r => r.json()).then(cats => {
                 const sel = document.getElementById('batch-category');
-                sel.innerHTML = '<option value="">-- 不指定文件夹 --</option>' + cats.map(c =>
+                sel.innerHTML = '<option value="">-- 不指定分类 --</option>' + cats.map(c =>
                     `<option value="${c.id}" ${c.id == selectedId ? 'selected' : ''}>${c.name}</option>`
                 ).join('');
             });
@@ -1072,16 +1161,23 @@
             fetch('/api/categories').then(r => r.json()).then(cats => {
                 const container = document.getElementById('category-list');
                 container.innerHTML = cats.map(c => `
-                    <div class="nav-item" data-cat="${c.id}" onclick="filterByCategory(${c.id}, '${escapeHtml(c.name)}')">
+                    <div class="nav-item" data-cat="${c.id}" data-cat-name="${escapeHtml(c.name)}" data-cat-color="${escapeHtml(c.color)}" onclick="filterByCategory(${c.id}, '${escapeHtml(c.name)}')">
                         <span class="dot" style="background:${c.color}"></span>
                         ${c.name}
                         <span class="badge">${c.file_count}</span>
-                        <span class="cat-actions">
-                            <button title="编辑" onclick="event.stopPropagation();editCategory(${c.id}, '${escapeHtml(c.name)}', '${escapeHtml(c.color)}')">✏️</button>
-                            <button class="del" title="删除" onclick="event.stopPropagation();deleteCategory(${c.id}, '${escapeHtml(c.name)}')">🗑️</button>
-                        </span>
                     </div>
                 `).join('');
+                
+                // 添加未分类项（仅当存在未分类文件时显示）
+                if (uncategorizedCount > 0) {
+                    container.innerHTML += `
+                        <div class="nav-item" data-filter="uncategorized" onclick="filterUncategorized()">
+                            <span class="dot" style="background:#9ca3af"></span>
+                            未分类
+                            <span class="badge" id="badge-uncategorized">${uncategorizedCount}</span>
+                        </div>
+                    `;
+                }
             });
         }
 
@@ -1092,32 +1188,67 @@
                 document.getElementById('badge-all').textContent = s.total;
                 document.getElementById('badge-exists').textContent = s.exists;
                 document.getElementById('badge-missing').textContent = s.missing;
+                document.getElementById('badge-favorites').textContent = s.favorites;
+                const badgeUncategorized = document.getElementById('badge-uncategorized');
+                if (badgeUncategorized) {
+                    badgeUncategorized.textContent = s.uncategorized;
+                }
+                uncategorizedCount = s.uncategorized;
+                loadCategories();
+            });
+        }
+
+        let currentSortBy = 'created_at';
+        let currentSortOrder = 'desc';
+
+        function toggleSort(field) {
+            if (currentSortBy === field) {
+                currentSortOrder = currentSortOrder === 'asc' ? 'desc' : 'asc';
+            } else {
+                currentSortBy = field;
+                currentSortOrder = field === 'year' ? 'desc' : 'asc';
+            }
+            updateSortIndicators();
+            currentPage = 1;
+            loadFiles();
+        }
+
+        function updateSortIndicators() {
+            document.querySelectorAll('.file-list-header [onclick^="toggleSort"]').forEach(el => {
+                const field = el.getAttribute('onclick').match(/'([^']+)'/)[1];
+                const arrow = el.querySelector('.sort-arrow');
+                el.classList.toggle('active-sort', field === currentSortBy);
+                if (field === currentSortBy) {
+                    arrow.textContent = currentSortOrder === 'asc' ? '▲' : '▼';
+                } else {
+                    arrow.textContent = '';
+                }
             });
         }
 
         function loadFiles() {
             const search = document.getElementById('search-input').value;
-            const sortVal = document.getElementById('sort-select').value;
-            const idx = sortVal.lastIndexOf('_');
-            const sort_by = sortVal.substring(0, idx);
-            const sort_order = sortVal.substring(idx + 1);
 
             let params = new URLSearchParams({
                 page: currentPage,
                 per_page: 50,
-                sort_by,
-                sort_order,
+                sort_by: currentSortBy,
+                sort_order: currentSortOrder,
             });
             if (search) params.set('search', search);
             if (currentCategory) params.set('category_id', currentCategory);
             if (currentFilter === 'exists') params.set('file_exists', 1);
             if (currentFilter === 'missing') params.set('file_exists', 0);
+            if (currentFilter === 'favorites') params.set('favorite', 1);
+            if (currentFilter === 'uncategorized') params.set('uncategorized', 1);
 
             fetch(`/api/files?${params}`).then(r => r.json()).then(data => {
                 renderFiles(data.files);
                 renderPagination(data);
+                updateSortIndicators();
                 document.getElementById('current-count').textContent = `${data.total} 项`;
                 const emptyState = document.getElementById('empty-state');
+                const header = document.getElementById('file-list-header');
                 if (data.total === 0) {
                     const isSearching = search.trim() !== '';
                     if (isSearching) {
@@ -1126,8 +1257,10 @@
                         emptyState.innerHTML = `<div class="icon">📂</div><h3>仓库还是空的</h3><p>点击"添加文件"开始管理你的文件吧</p><button class="btn btn-primary" onclick="openAddModal()">＋ 添加第一个文件</button>`;
                     }
                     emptyState.style.display = 'block';
+                    header.style.display = 'none';
                 } else {
                     emptyState.style.display = 'none';
+                    header.style.display = 'flex';
                 }
             });
         }
@@ -1142,40 +1275,35 @@
             container.innerHTML = files.map(f => {
                 const classes = ['file-item'];
                 if (!f.file_exists) classes.push('missing');
-                const icon = getFileIcon(f.file_ext);
                 const existsBadge = f.file_exists ? '' : '<span style="font-size:11px;color:#f59e0b">⚠ 文件丢失</span>';
                 return `
-                <div class="${classes.join(' ')}" data-id="${f.id}" onclick="toggleHighlight(event, ${f.id})" ondblclick="openFile(${f.id})">
-                    <div class="file-icon">${icon}</div>
-                    <div class="file-info">
+                <div class="${classes.join(' ')}" data-id="${f.id}" onclick="toggleHighlight(event, ${f.id})">
+                    <button class="btn-icon fav${f.favorite ? ' active' : ''}" title="${f.favorite ? '取消收藏' : '收藏'}" onclick="event.stopPropagation();toggleFavorite(${f.id})" style="flex-shrink:0;width:var(--col-icon)"><svg viewBox="0 0 24 24" class="fav-star"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/></svg></button>
+                    <span class="tag-gap"></span>
+                    <div class="file-info" ondblclick="event.stopPropagation();openFile(${f.id})">
                         <div class="name">
-                            ${escapeHtml(f.title)} <span style="color:var(--text-muted);font-weight:400">${(f.file_ext || '').replace('.', '')}</span> ${existsBadge}
+                            ${escapeHtml(f.title)} ${existsBadge}
                         </div>
                     </div>
-                    <div class="file-tags">
-                        ${(() => {
-                            const authors = getAuthors(f.author);
-                            if (authors.length === 0) return '<span class="author-tag">✍️ 未设置</span>';
-                            if (authors.length === 1) return `<span class="author-tag" title="作者">✍️ ${escapeHtml(authors[0])}</span>`;
-                            return `<span class="author-dropdown" onclick="event.stopPropagation();toggleAuthorDropdown(this)">
-                                <span class="author-tag has-more" title="作者">✍️ ${escapeHtml(authors[0])}</span>
-                                <div class="author-dropdown-menu">${authors.map(a => `<div class="author-option">${escapeHtml(a)}</div>`).join('')}</div>
-                            </span>`;
-                        })()}
-                        <select class="read-status-select status-${f.read_status || 'unread'}" onchange="event.stopPropagation();updateReadStatus(${f.id}, this)">
-                            <option value="unread" ${(f.read_status || 'unread') === 'unread' ? 'selected' : ''}>未阅读</option>
-                            <option value="reading" ${f.read_status === 'reading' ? 'selected' : ''}>在阅读</option>
-                            <option value="read" ${f.read_status === 'read' ? 'selected' : ''}>已阅读</option>
-                        </select>
-                        <span class="year-tag" title="出版时间">📅 ${f.year ? escapeHtml(f.year) : '未设置'}</span>
-                    </div>
-                    <div class="file-actions">
-                        <button class="btn-icon fav${f.favorite ? ' active' : ''}" title="${f.favorite ? '取消收藏' : '收藏'}" onclick="event.stopPropagation();toggleFavorite(${f.id})">${f.favorite ? '⭐' : '☆'}</button>
-                        <button class="btn-icon" title="打开文件" onclick="event.stopPropagation();openFile(${f.id})">📂</button>
-                        <button class="btn-icon" title="定位文件" onclick="event.stopPropagation();locateFile(${f.id})">📁</button>
-                        <button class="btn-icon" title="编辑" onclick="event.stopPropagation();showEditModal(${f.id})">✏️</button>
-                        <button class="btn-icon danger" title="移出仓库" onclick="event.stopPropagation();deleteFile(${f.id})">🗑️</button>
-                    </div>
+                    <span class="tag-gap"></span>
+                    <span class="format-tag">${(f.file_ext || '').replace('.', '')}</span>
+                    <span class="tag-gap"></span>
+                    ${(() => {
+                        const authors = getAuthors(f.author);
+                        if (authors.length === 0) return `<span class="author-tag"></span><span class="tag-gap"></span>`;
+                        if (authors.length === 1) return `<span class="author-tag" title="作者">${escapeHtml(authors[0])}</span><span class="tag-gap"></span>`;
+                        return `<span class="author-dropdown" onclick="event.stopPropagation();toggleAuthorDropdown(this)">
+                            <span class="author-tag has-more" title="作者">${escapeHtml(authors[0])}</span>
+                            <div class="author-dropdown-menu">${authors.map(a => `<div class="author-option">${escapeHtml(a)}</div>`).join('')}</div>
+                        </span><span class="tag-gap"></span>`;
+                    })()}
+                    <select class="read-status-select status-${f.read_status || 'unread'}" onchange="event.stopPropagation();updateReadStatus(${f.id}, this)">
+                        <option value="unread" ${(f.read_status || 'unread') === 'unread' ? 'selected' : ''}>未阅读</option>
+                        <option value="reading" ${f.read_status === 'reading' ? 'selected' : ''}>在阅读</option>
+                        <option value="read" ${f.read_status === 'read' ? 'selected' : ''}>已阅读</option>
+                    </select>
+                    <span class="tag-gap"></span>
+                    <span class="year-tag" title="出版时间${f.year ? '' : '（未设置）'}">${f.year ? escapeHtml(f.year) : ''}</span>
                 </div>`;
             }).join('');
         }
@@ -1326,9 +1454,9 @@
                         if (btn) {
                             btn.classList.toggle('active', data.favorite);
                             btn.title = data.favorite ? '取消收藏' : '收藏';
-                            btn.textContent = data.favorite ? '⭐' : '☆';
                         }
                     }
+                    loadStats();
                 } else {
                     showToast(data.error || '操作失败', 'error');
                 }
@@ -1367,6 +1495,18 @@
             loadFiles();
         }
 
+        function filterUncategorized() {
+            document.querySelectorAll('.nav-item[data-filter]').forEach(e => e.classList.remove('active'));
+            document.querySelectorAll('.nav-item[data-cat]').forEach(e => e.classList.remove('active'));
+            const el = document.querySelector('.nav-item[data-filter="uncategorized"]');
+            if (el) el.classList.add('active');
+            currentFilter = 'uncategorized';
+            currentCategory = null;
+            currentPage = 1;
+            document.getElementById('current-title').textContent = '未分类';
+            loadFiles();
+        }
+
         function goToPage(p) {
             currentPage = p;
             loadFiles();
@@ -1397,6 +1537,93 @@
             document.body.appendChild(toast);
             setTimeout(() => { toast.remove(); }, 3000);
         }
+
+        // ========== 列宽初始化 ==========
+        (function() {
+            const root = document.documentElement;
+
+            function px(v) { return parseInt(getComputedStyle(root).getPropertyValue(v)) || 0; }
+
+            function initTitleWidth() {
+                const container = document.getElementById('file-list-container');
+                const header = document.getElementById('file-list-header');
+                if (!container || !header) return;
+                const containerStyle = getComputedStyle(container);
+                const paddingLeft = parseFloat(containerStyle.paddingLeft) || 0;
+                const paddingRight = parseFloat(containerStyle.paddingRight) || 0;
+                const avail = container.clientWidth - paddingLeft - paddingRight;
+                // 固定列总宽 = icon + 5个resizer(14*5) + format + author + read + year
+                const fixed = px('--col-icon') + 14 * 5 + px('--col-format') + px('--col-author') + px('--col-read') + px('--col-year');
+                const titleW = avail - fixed;
+                if (titleW > 80) root.style.setProperty('--col-title', titleW + 'px');
+            }
+
+            initTitleWidth();
+            window.addEventListener('resize', initTitleWidth);
+        })();
+
+        // ========== 右键菜单 ==========
+        (function() {
+            const fileMenu = document.getElementById('context-menu');
+            const catMenu = document.getElementById('cat-context-menu');
+            let ctxFileId = null;
+            let ctxCatId = null;
+            let ctxCatName = null;
+            let ctxCatColor = null;
+
+            document.addEventListener('contextmenu', e => {
+                // 先隐藏所有菜单
+                hideAllMenus();
+
+                // 检查是否点击了分类项
+                const catItem = e.target.closest('.nav-item[data-cat]');
+                if (catItem) {
+                    ctxCatId = parseInt(catItem.dataset.cat);
+                    ctxCatName = catItem.dataset.catName;
+                    ctxCatColor = catItem.dataset.catColor;
+                    if (isNaN(ctxCatId)) return;
+                    e.preventDefault();
+                    const x = Math.min(e.clientX, window.innerWidth - 160);
+                    const y = Math.min(e.clientY, window.innerHeight - 120);
+                    catMenu.style.left = x + 'px';
+                    catMenu.style.top = y + 'px';
+                    catMenu.classList.add('show');
+                    return;
+                }
+
+                // 检查是否点击了文件项
+                const fileItem = e.target.closest('.file-item');
+                if (!fileItem) return;
+                ctxFileId = parseInt(fileItem.dataset.id);
+                if (isNaN(ctxFileId)) return;
+                e.preventDefault();
+                const x = Math.min(e.clientX, window.innerWidth - 160);
+                const y = Math.min(e.clientY, window.innerHeight - 180);
+                fileMenu.style.left = x + 'px';
+                fileMenu.style.top = y + 'px';
+                fileMenu.classList.add('show');
+            });
+
+            document.addEventListener('click', e => {
+                if (!e.target.closest('.context-menu')) hideAllMenus();
+            });
+
+            function hideAllMenus() {
+                fileMenu.classList.remove('show');
+                catMenu.classList.remove('show');
+            }
+
+            window.ctxOpenFile = function() { if (ctxFileId) { openFile(ctxFileId); hideAllMenus(); } };
+            window.ctxLocateFile = function() { if (ctxFileId) { locateFile(ctxFileId); hideAllMenus(); } };
+            window.ctxEditFile = function() { if (ctxFileId) { showEditModal(ctxFileId); hideAllMenus(); } };
+            window.ctxDeleteFile = function() { if (ctxFileId) { deleteFile(ctxFileId); hideAllMenus(); } };
+            window.ctxEditCategory = function() {
+                if (ctxCatId) { editCategory(ctxCatId, ctxCatName, ctxCatColor); hideAllMenus(); }
+            };
+            window.ctxDeleteCategory = function() {
+                if (ctxCatId) { deleteCategory(ctxCatId, ctxCatName); hideAllMenus(); }
+            };
+        })();
 
     </script>
 </body>
