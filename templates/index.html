@@ -277,6 +277,57 @@
             padding: 1px 8px;
             white-space: nowrap;
             flex-shrink: 0;
+            cursor: default;
+        }
+        .author-tag.has-more {
+            cursor: pointer;
+            user-select: none;
+        }
+        .author-tag.has-more::after {
+            content: ' ▾';
+            font-size: 10px;
+            color: var(--text-muted);
+        }
+        .author-dropdown {
+            position: relative;
+            display: inline-flex;
+            flex-shrink: 0;
+        }
+        .author-dropdown-menu {
+            display: none;
+            position: absolute;
+            top: 100%;
+            left: 0;
+            margin-top: 4px;
+            background: var(--card-bg);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            box-shadow: var(--shadow-lg);
+            z-index: 100;
+            min-width: 120px;
+            max-height: 200px;
+            overflow-y: auto;
+        }
+        .author-dropdown-menu.show {
+            display: block;
+        }
+        .author-option {
+            padding: 6px 12px;
+            font-size: 12px;
+            cursor: pointer;
+            white-space: nowrap;
+            color: var(--text);
+            transition: background var(--transition);
+        }
+        .author-option:hover {
+            background: var(--primary-light);
+            color: var(--primary);
+        }
+        .author-option:first-child {
+            border-radius: 8px 8px 0 0;
+        }
+        .author-option:last-child {
+            border-radius: 0 0 8px 8px;
         }
         .year-tag {
             font-size: 12px;
@@ -662,8 +713,8 @@
                     <input type="text" id="file-year" placeholder="如：2023（选填）">
                 </div>
                 <div class="form-group">
-                    <label>作者</label>
-                    <input type="text" id="file-author" placeholder="作者信息（选填）">
+                    <label>作者（多个用换行或 ; 或 ；隔开）</label>
+                    <textarea id="file-author" rows="2"></textarea>
                 </div>
                 <div class="form-group">
                     <label>分类</label>
@@ -755,6 +806,30 @@
         let editingId = null;
         let batchFiles = [];  // { name, path, folder }
         let confirmCallback = null;
+
+        // ========== Author helpers ==========
+        function getAuthors(str) {
+            if (!str) return [];
+            return str.split(/[;；\n]/).map(s => s.trim()).filter(s => s);
+        }
+
+        function normalizeAuthors(str) {
+            const authors = getAuthors(str);
+            return authors.join(';');
+        }
+
+        function toggleAuthorDropdown(el) {
+            const menu = el.querySelector('.author-dropdown-menu');
+            const isOpen = menu.classList.contains('show');
+            // 先关闭所有
+            document.querySelectorAll('.author-dropdown-menu.show').forEach(m => m.classList.remove('show'));
+            if (!isOpen) menu.classList.add('show');
+        }
+
+        // 全局点击关闭作者下拉
+        document.addEventListener('click', () => {
+            document.querySelectorAll('.author-dropdown-menu.show').forEach(m => m.classList.remove('show'));
+        });
 
         // ========== Init ==========
         document.addEventListener('DOMContentLoaded', () => {
@@ -1078,13 +1153,21 @@
                         </div>
                     </div>
                     <div class="file-tags">
+                        ${(() => {
+                            const authors = getAuthors(f.author);
+                            if (authors.length === 0) return '<span class="author-tag">✍️ 未设置</span>';
+                            if (authors.length === 1) return `<span class="author-tag" title="作者">✍️ ${escapeHtml(authors[0])}</span>`;
+                            return `<span class="author-dropdown" onclick="event.stopPropagation();toggleAuthorDropdown(this)">
+                                <span class="author-tag has-more" title="作者">✍️ ${escapeHtml(authors[0])}</span>
+                                <div class="author-dropdown-menu">${authors.map(a => `<div class="author-option">${escapeHtml(a)}</div>`).join('')}</div>
+                            </span>`;
+                        })()}
                         <select class="read-status-select status-${f.read_status || 'unread'}" onchange="event.stopPropagation();updateReadStatus(${f.id}, this)">
                             <option value="unread" ${(f.read_status || 'unread') === 'unread' ? 'selected' : ''}>未阅读</option>
                             <option value="reading" ${f.read_status === 'reading' ? 'selected' : ''}>在阅读</option>
                             <option value="read" ${f.read_status === 'read' ? 'selected' : ''}>已阅读</option>
                         </select>
                         <span class="year-tag" title="出版时间">📅 ${f.year ? escapeHtml(f.year) : '未设置'}</span>
-                        <span class="author-tag" title="作者">✍️ ${f.author ? escapeHtml(f.author) : '未设置'}</span>
                     </div>
                     <div class="file-actions">
                         <button class="btn-icon fav${f.favorite ? ' active' : ''}" title="${f.favorite ? '取消收藏' : '收藏'}" onclick="event.stopPropagation();toggleFavorite(${f.id})">${f.favorite ? '⭐' : '☆'}</button>
@@ -1172,7 +1255,7 @@
             const payload = {
                 title: document.getElementById('file-title').value.trim(),
                 file_path: document.getElementById('file-path').value.trim(),
-                author: document.getElementById('file-author').value.trim(),
+                author: normalizeAuthors(document.getElementById('file-author').value),
                 year: document.getElementById('file-year').value.trim(),
                 category_id: document.getElementById('file-category').value || null,
             };
