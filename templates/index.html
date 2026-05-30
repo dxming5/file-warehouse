@@ -308,7 +308,6 @@
         }
         .author-tag {
             font-size: 14px;
-            font-weight: 600;
             color: var(--text-secondary);
             white-space: nowrap;
             flex-shrink: 0;
@@ -391,7 +390,6 @@
         }
         .read-status-tag {
             font-size: 14px;
-            font-weight: 600;
             white-space: nowrap;
             flex-shrink: 0;
             cursor: pointer;
@@ -784,20 +782,20 @@
         <div class="topbar">
             <span class="title" id="current-title">全部文件</span>
             <span class="count" id="current-count">0 项</span>
-            <button class="btn btn-primary btn-sm" onclick="openAddModal()">＋ 添加文件</button>
             <input type="text" class="search-input" id="search-input" placeholder="搜索标题名..." oninput="debounceSearch()">
             <button class="btn btn-secondary btn-sm" onclick="verifyAll()" title="校验所有文件是否存在">🔍 校验</button>
+            <button class="btn btn-primary btn-sm" onclick="openAddModal()">＋ 添加文件</button>
         </div>
 
         <!-- File List -->
         <div class="file-list-container" id="file-list-container">
             <div class="file-list-header" id="file-list-header" style="display:none">
                 <span class="h-icon"></span>
-                <span class="col-resizer" data-left="icon" data-right="title">|</span><span class="h-title" onclick="toggleSort('title')">标题<span class="sort-arrow"></span></span>
+                <span class="col-resizer" data-left="icon" data-right="year">|</span><span class="h-year" onclick="toggleSort('year')">出版时间<span class="sort-arrow"></span></span>
+                <span class="col-resizer" data-left="year" data-right="title">|</span><span class="h-title" onclick="toggleSort('title')">标题<span class="sort-arrow"></span></span>
                 <span class="col-resizer" data-left="title" data-right="format">|</span><span class="h-format" onclick="toggleSort('format')">格式<span class="sort-arrow"></span></span>
                 <span class="col-resizer" data-left="format" data-right="author">|</span><span class="h-author" onclick="toggleSort('author')">作者<span class="sort-arrow"></span></span>
                 <span class="col-resizer" data-left="author" data-right="read">|</span><span class="h-read" onclick="toggleSort('read_status')">阅读状态<span class="sort-arrow"></span></span>
-                <span class="col-resizer" data-left="read" data-right="year">|</span><span class="h-year" onclick="toggleSort('year')">出版时间<span class="sort-arrow"></span></span>
             </div>
             <div class="file-list" id="file-list"></div>
             <div class="empty-state" id="empty-state" style="display:none">
@@ -986,8 +984,7 @@
         function toggleAuthorDropdown(el) {
             const menu = el.querySelector('.author-dropdown-menu');
             const isOpen = menu.classList.contains('show');
-            // 先关闭所有
-            document.querySelectorAll('.author-dropdown-menu.show').forEach(m => m.classList.remove('show'));
+            document.querySelectorAll('.author-dropdown-menu.show, .read-status-dropdown-menu.show').forEach(m => m.classList.remove('show'));
             if (!isOpen) menu.classList.add('show');
         }
 
@@ -1669,6 +1666,8 @@
                 <div class="${classes.join(' ')}" data-id="${f.id}" onclick="toggleHighlight(event, ${f.id})">
                     <button class="btn-icon fav${f.favorite ? ' active' : ''}" title="${f.favorite ? '取消收藏' : '收藏'}" onclick="event.stopPropagation();toggleFavorite(${f.id})" style="flex-shrink:0;width:var(--col-icon)"><svg viewBox="0 0 24 24" class="fav-star"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/></svg></button>
                     <span class="tag-gap"></span>
+                    <span class="year-tag" title="出版时间${f.year ? '' : '（未设置）'}">${f.year ? escapeHtml(f.year) : ''}</span>
+                    <span class="tag-gap"></span>
                     <div class="file-info" ondblclick="event.stopPropagation();openFile(${f.id})">
                         <div class="name">
                             ${escapeHtml(f.title)} ${existsBadge}
@@ -1694,8 +1693,6 @@
                             <div class="read-status-option status-read" onclick="event.stopPropagation();updateReadStatus(${f.id}, 'read', this.closest('.read-status-dropdown'))">已阅读</div>
                         </div>
                     </div>
-                    <span class="tag-gap"></span>
-                    <span class="year-tag" title="出版时间${f.year ? '' : '（未设置）'}">${f.year ? escapeHtml(f.year) : ''}</span>
                 </div>`;
             }).join('');
         }
@@ -1885,7 +1882,7 @@
         function toggleReadStatusDropdown(el) {
             const menu = el.querySelector('.read-status-dropdown-menu');
             const isOpen = menu.classList.contains('show');
-            document.querySelectorAll('.read-status-dropdown-menu.show').forEach(m => m.classList.remove('show'));
+            document.querySelectorAll('.author-dropdown-menu.show, .read-status-dropdown-menu.show').forEach(m => m.classList.remove('show'));
             if (!isOpen) menu.classList.add('show');
         }
 
