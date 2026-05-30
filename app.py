@@ -51,9 +51,11 @@ def init_db():
         CREATE TABLE IF NOT EXISTS categories (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             name TEXT NOT NULL UNIQUE,
+            parent_id INTEGER DEFAULT NULL,
             color TEXT DEFAULT '#4a90d9',
             icon TEXT DEFAULT '📁',
-            created_at TEXT DEFAULT (datetime('now','localtime'))
+            created_at TEXT DEFAULT (datetime('now','localtime')),
+            FOREIGN KEY (parent_id) REFERENCES categories(id) ON DELETE SET NULL
         );
 
         CREATE TABLE IF NOT EXISTS files (
@@ -81,6 +83,7 @@ def init_db():
         CREATE INDEX IF NOT EXISTS idx_files_title ON files(title);
         CREATE INDEX IF NOT EXISTS idx_files_tags ON files(tags);
         CREATE INDEX IF NOT EXISTS idx_files_file_exists ON files(file_exists);
+        CREATE INDEX IF NOT EXISTS idx_categories_parent ON categories(parent_id);
 
         CREATE TABLE IF NOT EXISTS settings (
             key TEXT PRIMARY KEY,
@@ -90,6 +93,11 @@ def init_db():
     # 确保 year 列存在（兼容已有数据库）
     try:
         db.execute("ALTER TABLE files ADD COLUMN year TEXT DEFAULT ''")
+    except sqlite3.OperationalError:
+        pass
+    # 确保 parent_id 列存在（兼容已有数据库）
+    try:
+        db.execute("ALTER TABLE categories ADD COLUMN parent_id INTEGER DEFAULT NULL")
     except sqlite3.OperationalError:
         pass
     db.commit()
@@ -546,10 +554,10 @@ def get_categories():
     db = get_db()
     rows = db.execute(
         "SELECT c.*, COUNT(f.id) as file_count FROM categories c "
-        "LEFT JOIN files f ON f.category_id = c.id GROUP BY c.id ORDER BY c.id"
+        "LEFT JOIN files f ON f.category_id = c.id GROUP BY c.id ORDER BY c.parent_id, c.id"
     ).fetchall()
     return jsonify([{
-        'id': r['id'], 'name': r['name'], 'color': r['color'],
+        'id': r['id'], 'name': r['name'], 'parent_id': r['parent_id'], 'color': r['color'],
         'icon': r['icon'], 'file_count': r['file_count']
     } for r in rows])
 
@@ -562,8 +570,17 @@ def add_category():
         return jsonify({'error': '分类名不能为空'}), 400
     color = data.get('color', '#6b7280')
     icon = data.get('icon', '📁')
+    parent_id = data.get('parent_id')
+    
+    # 验证父分类是否存在
+    if parent_id:
+        parent = db.execute("SELECT id FROM categories WHERE id = ?", (parent_id,)).fetchone()
+        if not parent:
+            return jsonify({'error': '父分类不存在'}), 404
+    
     try:
-        db.execute("INSERT INTO categories(name, color, icon) VALUES(?,?,?)", (name, color, icon))
+        db.execute("INSERT INTO categories(name, parent_id, color, icon) VALUES(?,?,?,?)", 
+                   (name, parent_id, color, icon))
         db.commit()
         return jsonify({'id': db.execute("SELECT last_insert_rowid()").fetchone()[0], 'message': '创建成功'}), 201
     except sqlite3.IntegrityError:
@@ -576,18 +593,53 @@ def update_category(cat_id):
     name = data.get('name', '').strip()
     color = data.get('color', '#6b7280')
     icon = data.get('icon', '📁')
-    db.execute("UPDATE categories SET name=?, color=?, icon=? WHERE id=?",
-               (name, color, icon, cat_id))
+    parent_id = data.get('parent_id')
+    
+    # 防循环引用检查
+    if parent_id and parent_id != cat_id:
+        if _is_descendant(db, cat_id, parent_id):
+            return jsonify({'error': '不能将分类设为自己或子分类的子分类'}), 400
+    
+    db.execute("UPDATE categories SET name=?, parent_id=?, color=?, icon=? WHERE id=?",
+               (name, parent_id, color, icon, cat_id))
     db.commit()
     return jsonify({'message': '更新成功'})
+
+def _get_all_descendants(db, cat_id):
+    """递归获取所有子分类ID"""
+    descendants = []
+    children = db.execute("SELECT id FROM categories WHERE parent_id = ?", (cat_id,)).fetchall()
+    for child in children:
+        descendants.append(child['id'])
+        descendants.extend(_get_all_descendants(db, child['id']))
+    return descendants
+
+def _is_descendant(db, ancestor_id, target_id):
+    """检查 target_id 是否是 ancestor_id 的后代"""
+    if ancestor_id == target_id:
+        return True
+    descendants = _get_all_descendants(db, ancestor_id)
+    return target_id in descendants
 
 @app.route('/api/categories/<int:cat_id>', methods=['DELETE'])
 def delete_category(cat_id):
     db = get_db()
-    db.execute("UPDATE files SET category_id=NULL WHERE category_id=?", (cat_id,))
-    db.execute("DELETE FROM categories WHERE id=?", (cat_id,))
+    
+    # 获取所有子分类ID
+    all_descendants = _get_all_descendants(db, cat_id)
+    all_cat_ids = [cat_id] + all_descendants
+    
+    # 删除这些分类下的所有文件
+    if all_cat_ids:
+        placeholders = ','.join('?' * len(all_cat_ids))
+        db.execute(f"DELETE FROM files WHERE category_id IN ({placeholders})", all_cat_ids)
+    
+    # 删除分类本身及所有子分类
+    db.execute(f"DELETE FROM categories WHERE id IN ({placeholders})", all_cat_ids)
     db.commit()
-    return jsonify({'message': '删除成功'})
+    
+    deleted_cats = len(all_cat_ids)
+    return jsonify({'message': f'已删除 {deleted_cats} 个分类及其所有文件'})
 
 # --- 统计 ---
 

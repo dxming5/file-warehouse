@@ -119,6 +119,24 @@
             width: 8px; height: 8px; border-radius: 50%;
             flex-shrink: 0;
         }
+        .cat-toggle {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            width: 16px;
+            height: 16px;
+            margin-right: 4px;
+            cursor: pointer;
+            font-size: 10px;
+            color: var(--text-muted);
+            transition: transform 0.2s ease;
+            user-select: none;
+        }
+        .cat-toggle:hover {
+            color: var(--primary);
+            background: #f3f4f6;
+            border-radius: 3px;
+        }
 
 
         .sidebar-footer {
@@ -774,8 +792,10 @@
 
     <!-- 右键菜单（分类） -->
     <div class="context-menu" id="cat-context-menu">
+        <div class="context-menu-item" onclick="ctxAddSubCategory()">📁 新建子分类</div>
         <div class="context-menu-item" onclick="ctxEditCategory()">✏️ 编辑分类</div>
-        <div class="context-menu-item danger" onclick="ctxDeleteCategory()">🗑️ 删除分类</div>
+        <div class="context-menu-divider"></div>
+        <div class="context-menu-item danger" onclick="ctxDeleteCategory()">🗑️ 删除分类及所有文件</div>
     </div>
 
     <!-- 编辑弹窗 -->
@@ -844,9 +864,16 @@
         <div class="modal" style="width:420px">
             <h3 id="cat-modal-title">📁 新建分类</h3>
             <input type="hidden" id="edit-cat-id" value="">
+            <input type="hidden" id="edit-cat-parent-id" value="">
             <div class="form-group">
                 <label>分类名称 *</label>
                 <input type="text" id="new-cat-name" placeholder="如：工作文档、个人项目...">
+            </div>
+            <div class="form-group">
+                <label>父分类（可选）</label>
+                <select id="new-cat-parent">
+                    <option value="">-- 无父分类（顶级分类） --</option>
+                </select>
             </div>
             <div class="form-group">
                 <label>颜色</label>
@@ -891,6 +918,7 @@
         let editingId = null;
         let batchFiles = [];  // { name, path, folder }
         let confirmCallback = null;
+        let collapsedCategories = JSON.parse(localStorage.getItem('collapsedCategories') || '[]');
 
         // ========== Author helpers ==========
         function getAuthors(str) {
@@ -901,6 +929,26 @@
         function normalizeAuthors(str) {
             const authors = getAuthors(str);
             return authors.join(';');
+        }
+
+        // ========== 分类折叠/展开 ==========
+        function isCategoryCollapsed(path) {
+            return collapsedCategories.includes(path);
+        }
+
+        function toggleCategory(path) {
+            const index = collapsedCategories.indexOf(path);
+            if (index > -1) {
+                // 已折叠，展开
+                collapsedCategories.splice(index, 1);
+            } else {
+                // 未折叠，折叠
+                collapsedCategories.push(path);
+            }
+            // 保存到 localStorage
+            localStorage.setItem('collapsedCategories', JSON.stringify(collapsedCategories));
+            // 重新渲染分类列表
+            loadCategories();
         }
 
         function toggleAuthorDropdown(el) {
@@ -921,6 +969,12 @@
             loadCategories();
             loadFiles();
             loadStats();
+            
+            // 初始化时隐藏父分类选择器
+            const parentSelectGroup = document.getElementById('new-cat-parent').closest('.form-group');
+            if (parentSelectGroup) {
+                parentSelectGroup.style.display = 'none';
+            }
 
             // Nav clicks - 只处理静态的筛选项（不包括动态生成的未分类）
             document.querySelectorAll('.nav-item[data-filter]:not([data-filter="uncategorized"])').forEach(el => {
@@ -1046,9 +1100,11 @@
         }
 
         // ========== 分类管理 ==========
-        function showAddCategoryModal() {
-            document.getElementById('cat-modal-title').textContent = '📁 新建分类';
+        function showAddCategoryModal(parentId) {
+            const isSubCategory = !!parentId;
+            document.getElementById('cat-modal-title').textContent = isSubCategory ? '📁 新建子分类' : '📁 新建分类';
             document.getElementById('edit-cat-id').value = '';
+            document.getElementById('edit-cat-parent-id').value = parentId || '';
             document.getElementById('new-cat-name').value = '';
             document.getElementById('cat-save-btn').textContent = '创建';
             const defaultColor = '#4a90d9';
@@ -1056,23 +1112,104 @@
             document.querySelectorAll('.color-dot').forEach(d => d.classList.remove('picked'));
             const firstDot = document.querySelector('.color-dot[data-color="' + defaultColor + '"]');
             if (firstDot) firstDot.classList.add('picked');
+            
+            // 显示/隐藏父分类选择器
+            const parentSelectGroup = document.getElementById('new-cat-parent').closest('.form-group');
+            if (isSubCategory) {
+                // 新建子分类时，隐藏父分类选择器（自动使用传入的 parentId）
+                parentSelectGroup.style.display = 'none';
+            } else {
+                // 新建顶级分类时，隐藏父分类选择器（默认为空）
+                parentSelectGroup.style.display = 'none';
+            }
+            
             document.getElementById('cat-modal-overlay').classList.add('show');
         }
 
-        function editCategory(id, name, color) {
+        function editCategory(id, name, color, parentId) {
             document.getElementById('cat-modal-title').textContent = '✏️ 编辑分类';
             document.getElementById('edit-cat-id').value = id;
+            document.getElementById('edit-cat-parent-id').value = parentId || '';
             document.getElementById('new-cat-name').value = name;
             document.getElementById('cat-save-btn').textContent = '保存';
             document.getElementById('new-cat-color').value = color;
             document.querySelectorAll('.color-dot').forEach(d => d.classList.remove('picked'));
             const dot = document.querySelector('.color-dot[data-color="' + color + '"]');
             if (dot) dot.classList.add('picked');
+            
+            // 编辑时显示父分类选择器
+            const parentSelectGroup = document.getElementById('new-cat-parent').closest('.form-group');
+            parentSelectGroup.style.display = 'block';
+            loadParentCategoryOptions(parentId, id);
+            
             document.getElementById('cat-modal-overlay').classList.add('show');
+        }
+
+        function loadParentCategoryOptions(selectedParentId, excludeId) {
+            fetch('/api/categories').then(r => r.json()).then(cats => {
+                const sel = document.getElementById('new-cat-parent');
+                let html = '<option value="">-- 无父分类（顶级分类） --</option>';
+                
+                // 构建树形结构
+                const catMap = {};
+                cats.forEach(c => {
+                    catMap[c.id] = { ...c, children: [] };
+                });
+                
+                const rootCats = [];
+                cats.forEach(c => {
+                    if (c.parent_id && catMap[c.parent_id]) {
+                        catMap[c.parent_id].children.push(catMap[c.id]);
+                    } else {
+                        rootCats.push(catMap[c.id]);
+                    }
+                });
+                
+                // 递归添加选项（标准树形展示）
+                function addOptions(catList, level, parentPrefixStr) {
+                    catList.forEach((cat, index) => {
+                        if (cat.id === excludeId) return; // 排除自己
+                        
+                        const isLast = index === catList.length - 1;
+                        
+                        // 构建当前行的前缀
+                        let currentPrefix = '';
+                        
+                        if (level === 0) {
+                            // 顶级分类：📁 图标
+                            currentPrefix = ' ';
+                        } else {
+                            // 二级及以上：父级前缀字符串 + 当前连接符
+                            currentPrefix = parentPrefixStr + (isLast ? '└─ ' : '├─ ');
+                        }
+                        
+                        html += `<option value="${cat.id}" ${cat.id == selectedParentId ? 'selected' : ''}>${currentPrefix}${escapeHtml(cat.name)}</option>`;
+                        
+                        // 递归处理子分类
+                        if (cat.children.length > 0) {
+                            // 为子分类构建新的前缀字符串
+                            let newPrefixStr = parentPrefixStr;
+                            if (level > 0) {
+                                // 添加当前层的垂直连线或空格
+                                newPrefixStr += isLast ? '   ' : '│  ';
+                            }
+                            addOptions(cat.children, level + 1, newPrefixStr);
+                        }
+                    });
+                }
+                
+                addOptions(rootCats, 0, '');
+                sel.innerHTML = html;
+            });
         }
 
         function closeCatModal() {
             document.getElementById('cat-modal-overlay').classList.remove('show');
+            // 重置父分类选择器为隐藏状态
+            const parentSelectGroup = document.getElementById('new-cat-parent').closest('.form-group');
+            if (parentSelectGroup) {
+                parentSelectGroup.style.display = 'none';
+            }
         }
 
         function showConfirm(title, btnText, callback) {
@@ -1105,15 +1242,25 @@
             const name = document.getElementById('new-cat-name').value.trim();
             if (!name) { showToast('请输入分类名称', 'error'); return; }
             const color = document.getElementById('new-cat-color').value;
-
+            
+            // 获取父分类 ID
+            let parentId = null;
             const isEdit = !!editId;
+            if (isEdit) {
+                // 编辑时从下拉框获取
+                parentId = document.getElementById('new-cat-parent').value || null;
+            } else {
+                // 新建时从隐藏字段获取（右键新建子分类时传入的 parentId）
+                parentId = document.getElementById('edit-cat-parent-id').value || null;
+            }
+
             const url = isEdit ? `/api/categories/${editId}` : '/api/categories';
             const method = isEdit ? 'PUT' : 'POST';
 
             const resp = await fetch(url, {
                 method,
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ name, color }),
+                body: JSON.stringify({ name, color, parent_id: parentId }),
             });
             const data = await resp.json();
             if (resp.ok) {
@@ -1127,24 +1274,29 @@
         }
 
         async function deleteCategory(id, name) {
-            if (!confirm(`确定要删除分类「${name}」吗？\n\n其中的文件将变为"未分类"状态。`)) return;
-            const resp = await fetch(`/api/categories/${id}`, { method: 'DELETE' });
-            const data = await resp.json();
-            if (resp.ok) {
-                loadCategories();
-                if (currentCategory === id) {
-                    currentCategory = null;
-                    currentFilter = 'all';
-                    document.getElementById('current-title').textContent = '全部文件';
-                    document.querySelectorAll('.nav-item[data-cat]').forEach(e => e.classList.remove('active'));
-                    document.querySelector('.nav-item[data-filter="all"]').classList.add('active');
+            showConfirm(
+                `确定要删除分类「${name}」及其所有子分类吗？\n\n⚠️ 警告：这将永久删除该分类下的所有文件！`,
+                '确定删除',
+                async () => {
+                    const resp = await fetch(`/api/categories/${id}`, { method: 'DELETE' });
+                    const data = await resp.json();
+                    if (resp.ok) {
+                        loadCategories();
+                        if (currentCategory === id) {
+                            currentCategory = null;
+                            currentFilter = 'all';
+                            document.getElementById('current-title').textContent = '全部文件';
+                            document.querySelectorAll('.nav-item[data-cat]').forEach(e => e.classList.remove('active'));
+                            document.querySelector('.nav-item[data-filter="all"]').classList.add('active');
+                        }
+                        loadFiles();
+                        loadStats();
+                        showToast(data.message, 'success');
+                    } else {
+                        showToast(data.error || '删除失败', 'error');
+                    }
                 }
-                loadFiles();
-                loadStats();
-                showToast(data.message, 'success');
-            } else {
-                showToast(data.error || '删除失败', 'error');
-            }
+            );
         }
 
         function loadBatchCategoryOptions(selectedId) {
@@ -1160,13 +1312,54 @@
         function loadCategories() {
             fetch('/api/categories').then(r => r.json()).then(cats => {
                 const container = document.getElementById('category-list');
-                container.innerHTML = cats.map(c => `
-                    <div class="nav-item" data-cat="${c.id}" data-cat-name="${escapeHtml(c.name)}" data-cat-color="${escapeHtml(c.color)}" onclick="filterByCategory(${c.id}, '${escapeHtml(c.name)}')">
-                        <span class="dot" style="background:${c.color}"></span>
-                        ${c.name}
-                        <span class="badge">${c.file_count}</span>
-                    </div>
-                `).join('');
+                
+                // 构建树形结构
+                const catMap = {};
+                cats.forEach(c => {
+                    catMap[c.id] = { ...c, children: [] };
+                });
+                
+                const rootCats = [];
+                cats.forEach(c => {
+                    if (c.parent_id && catMap[c.parent_id]) {
+                        catMap[c.parent_id].children.push(catMap[c.id]);
+                    } else {
+                        rootCats.push(catMap[c.id]);
+                    }
+                });
+                
+                // 递归渲染树形结构
+                function renderTree(catList, level, parentPath) {
+                    return catList.map(cat => {
+                        const indent = level * 20; // 每层缩进 20px
+                        const hasChildren = cat.children.length > 0;
+                        const parentIdAttr = cat.parent_id ? `data-cat-parent-id="${cat.parent_id}"` : '';
+                        const currentPath = parentPath ? `${parentPath}.${cat.id}` : `${cat.id}`;
+                        const isCollapsed = isCategoryCollapsed(currentPath);
+                        
+                        let html = `
+                            <div class="nav-item" data-cat="${cat.id}" data-cat-name="${escapeHtml(cat.name)}" data-cat-color="${escapeHtml(cat.color)}" 
+                                 ${parentIdAttr}
+                                 data-cat-path="${currentPath}"
+                                 style="padding-left: ${12 + indent}px" 
+                                 onclick="filterByCategory(${cat.id}, '${escapeHtml(cat.name)}')">
+                                ${hasChildren ? `<span class="cat-toggle" onclick="event.stopPropagation();toggleCategory('${currentPath}')">${isCollapsed ? '▶' : '▼'}</span>` : '<span style="width:16px;display:inline-block"></span>'}
+                                <span class="dot" style="background:${cat.color}"></span>
+                                ${escapeHtml(cat.name)}
+                                <span class="badge">${cat.file_count}</span>
+                            </div>
+                        `;
+                        
+                        // 如果有子分类且未折叠，递归渲染子分类
+                        if (hasChildren && !isCollapsed) {
+                            html += renderTree(cat.children, level + 1, currentPath);
+                        }
+                        
+                        return html;
+                    }).join('');
+                }
+                
+                container.innerHTML = renderTree(rootCats, 0, '');
                 
                 // 添加未分类项（仅当存在未分类文件时显示）
                 if (uncategorizedCount > 0) {
@@ -1570,6 +1763,7 @@
             let ctxCatId = null;
             let ctxCatName = null;
             let ctxCatColor = null;
+            let ctxCatParentId = null;
 
             document.addEventListener('contextmenu', e => {
                 // 先隐藏所有菜单
@@ -1581,6 +1775,7 @@
                     ctxCatId = parseInt(catItem.dataset.cat);
                     ctxCatName = catItem.dataset.catName;
                     ctxCatColor = catItem.dataset.catColor;
+                    ctxCatParentId = catItem.dataset.catParentId ? parseInt(catItem.dataset.catParentId) : null;
                     if (isNaN(ctxCatId)) return;
                     e.preventDefault();
                     const x = Math.min(e.clientX, window.innerWidth - 160);
@@ -1617,8 +1812,11 @@
             window.ctxLocateFile = function() { if (ctxFileId) { locateFile(ctxFileId); hideAllMenus(); } };
             window.ctxEditFile = function() { if (ctxFileId) { showEditModal(ctxFileId); hideAllMenus(); } };
             window.ctxDeleteFile = function() { if (ctxFileId) { deleteFile(ctxFileId); hideAllMenus(); } };
+            window.ctxAddSubCategory = function() {
+                if (ctxCatId) { showAddCategoryModal(ctxCatId); hideAllMenus(); }
+            };
             window.ctxEditCategory = function() {
-                if (ctxCatId) { editCategory(ctxCatId, ctxCatName, ctxCatColor); hideAllMenus(); }
+                if (ctxCatId) { editCategory(ctxCatId, ctxCatName, ctxCatColor, ctxCatParentId); hideAllMenus(); }
             };
             window.ctxDeleteCategory = function() {
                 if (ctxCatId) { deleteCategory(ctxCatId, ctxCatName); hideAllMenus(); }
