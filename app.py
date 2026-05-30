@@ -100,6 +100,13 @@ def init_db():
         db.execute("ALTER TABLE categories ADD COLUMN parent_id INTEGER DEFAULT NULL")
     except sqlite3.OperationalError:
         pass
+    # 确保 sort_order 列存在（兼容已有数据库）
+    try:
+        db.execute("ALTER TABLE categories ADD COLUMN sort_order INTEGER DEFAULT 0")
+    except sqlite3.OperationalError:
+        pass
+    # 确保已有数据的 sort_order 用 id 填充（维持旧排序）
+    db.execute("UPDATE categories SET sort_order = id WHERE sort_order = 0")
     db.commit()
     db.close()
 
@@ -210,9 +217,12 @@ def get_or_create_folder_category(db, file_path):
         colors = ['#4a90d9', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#ec4899',
                   '#06b6d4', '#84cc16', '#f97316', '#6366f1', '#14b8a6', '#e11d48']
         idx = (hash(parent) % len(colors) + len(colors)) % len(colors)
+        max_order = db.execute(
+            "SELECT COALESCE(MAX(sort_order), -1) FROM categories WHERE parent_id IS NULL"
+        ).fetchone()[0]
         db.execute(
-            "INSERT INTO categories(name, color, icon) VALUES(?,?,?)",
-            (parent, colors[idx], '📁')
+            "INSERT INTO categories(name, color, icon, sort_order) VALUES(?,?,?,?)",
+            (parent, colors[idx], '📁', max_order + 1)
         )
         db.commit()
         return db.execute("SELECT last_insert_rowid()").fetchone()[0]
@@ -554,7 +564,7 @@ def get_categories():
     db = get_db()
     rows = db.execute(
         "SELECT c.*, COUNT(f.id) as file_count FROM categories c "
-        "LEFT JOIN files f ON f.category_id = c.id GROUP BY c.id ORDER BY c.parent_id, c.id"
+        "LEFT JOIN files f ON f.category_id = c.id GROUP BY c.id ORDER BY c.parent_id, c.sort_order, c.id"
     ).fetchall()
     return jsonify([{
         'id': r['id'], 'name': r['name'], 'parent_id': r['parent_id'], 'color': r['color'],
@@ -579,8 +589,19 @@ def add_category():
             return jsonify({'error': '父分类不存在'}), 404
     
     try:
-        db.execute("INSERT INTO categories(name, parent_id, color, icon) VALUES(?,?,?,?)", 
-                   (name, parent_id, color, icon))
+        # 计算 sort_order：同级最大值 + 1
+        if parent_id:
+            max_order = db.execute(
+                "SELECT COALESCE(MAX(sort_order), -1) FROM categories WHERE parent_id = ?", (parent_id,)
+            ).fetchone()[0]
+        else:
+            max_order = db.execute(
+                "SELECT COALESCE(MAX(sort_order), -1) FROM categories WHERE parent_id IS NULL"
+            ).fetchone()[0]
+        sort_order = max_order + 1
+        
+        db.execute("INSERT INTO categories(name, parent_id, color, icon, sort_order) VALUES(?,?,?,?,?)", 
+                   (name, parent_id, color, icon, sort_order))
         db.commit()
         return jsonify({'id': db.execute("SELECT last_insert_rowid()").fetchone()[0], 'message': '创建成功'}), 201
     except sqlite3.IntegrityError:
@@ -655,6 +676,122 @@ def delete_category(cat_id):
     
     deleted_cats = len(all_cat_ids)
     return jsonify({'message': f'已删除 {deleted_cats} 个分类及其所有文件'})
+
+# --- 分类移动 / 排序 ---
+
+@app.route('/api/categories/<int:cat_id>/move', methods=['PUT'])
+def move_category(cat_id):
+    """拖动移动分类：跨父级移动 或 同级排序
+    请求体: { target_id: int, position: 'before'|'after'|'into' }
+      - target_id: 拖动到哪个分类上
+      - position: before=插到目标前面, after=插到目标后面, into=移入目标作为子分类
+    """
+    db = get_db()
+    data = request.get_json()
+    target_id = data.get('target_id')
+    position = data.get('position', 'into')
+    
+    if position not in ('before', 'after', 'into'):
+        return jsonify({'error': '无效的 position'}), 400
+    
+    # 获取当前分类
+    cat = db.execute("SELECT * FROM categories WHERE id = ?", (cat_id,)).fetchone()
+    if not cat:
+        return jsonify({'error': '分类不存在'}), 404
+    
+    # 获取目标分类
+    target = db.execute("SELECT * FROM categories WHERE id = ?", (target_id,)).fetchone()
+    if not target:
+        return jsonify({'error': '目标分类不存在'}), 404
+    
+    # 防循环引用
+    if position == 'into':
+        if target_id == cat_id or _is_descendant(db, cat_id, target_id):
+            return jsonify({'error': '不能将分类移到自己的子分类下'}), 400
+    elif target_id == cat_id:
+        return jsonify({'error': '不能移到自身'}), 400
+    
+    # 计算新的 parent_id 和 after_id
+    if position == 'into':
+        new_parent_id = target_id
+        # 插入到目标子分类末尾
+        last_child = db.execute(
+            "SELECT id FROM categories WHERE parent_id = ? ORDER BY sort_order DESC LIMIT 1",
+            (target_id,)
+        ).fetchone()
+        new_after_id = last_child['id'] if last_child else None
+    elif position == 'before':
+        new_parent_id = target['parent_id']
+        # 找目标的前一个兄弟
+        if target['parent_id'] is not None:
+            prev = db.execute(
+                "SELECT id FROM categories WHERE parent_id = ? AND sort_order < ? ORDER BY sort_order DESC LIMIT 1",
+                (target['parent_id'], target['sort_order'])
+            ).fetchone()
+        else:
+            prev = db.execute(
+                "SELECT id FROM categories WHERE parent_id IS NULL AND sort_order < ? ORDER BY sort_order DESC LIMIT 1",
+                (target['sort_order'],)
+            ).fetchone()
+        new_after_id = prev['id'] if prev else None
+    else:  # 'after'
+        new_parent_id = target['parent_id']
+        new_after_id = target_id
+    
+    # 防循环引用（跨父级移动）
+    if new_parent_id is not None:
+        if new_parent_id == cat_id or _is_descendant(db, cat_id, new_parent_id):
+            return jsonify({'error': '不能将分类移到自己的子分类下'}), 400
+    
+    old_parent_id = cat['parent_id']
+    
+    # 如果位置没变，直接返回
+    if new_parent_id == old_parent_id and new_after_id is None and position == 'into':
+        pass  # 可能需要插入到列表末尾，继续处理
+    if new_parent_id == old_parent_id and new_after_id == cat_id:
+        return jsonify({'message': '位置未变化'})
+    
+    # 获取目标父级下所有兄弟（排除当前分类本身）
+    if new_parent_id is not None:
+        siblings = db.execute(
+            "SELECT id FROM categories WHERE parent_id = ? AND id != ? ORDER BY sort_order",
+            (new_parent_id, cat_id)
+        ).fetchall()
+    else:
+        siblings = db.execute(
+            "SELECT id FROM categories WHERE parent_id IS NULL AND id != ? ORDER BY sort_order",
+            (cat_id,)
+        ).fetchall()
+    
+    # 构建新的顺序列表
+    new_order_ids = []
+    inserted = False
+    
+    if new_after_id is None:
+        # 插入最前面
+        new_order_ids.append(cat_id)
+        for s in siblings:
+            new_order_ids.append(s['id'])
+    else:
+        for s in siblings:
+            new_order_ids.append(s['id'])
+            if s['id'] == new_after_id:
+                new_order_ids.append(cat_id)
+                inserted = True
+        if not inserted:
+            new_order_ids.append(cat_id)
+    
+    # 更新 parent_id
+    if new_parent_id != old_parent_id:
+        db.execute("UPDATE categories SET parent_id = ? WHERE id = ?",
+                   (new_parent_id, cat_id))
+    
+    # 批量更新 sort_order
+    for i, cid in enumerate(new_order_ids):
+        db.execute("UPDATE categories SET sort_order = ? WHERE id = ?", (i, cid))
+    
+    db.commit()
+    return jsonify({'message': '移动成功'})
 
 # --- 统计 ---
 

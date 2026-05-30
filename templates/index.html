@@ -138,6 +138,23 @@
             border-radius: 3px;
         }
 
+        /* ===== 分类拖拽排序 ===== */
+        .nav-item.dragging {
+            opacity: 0.4;
+            background: #eef2ff;
+        }
+        .nav-item.drag-over-before {
+            border-top: 2px solid var(--primary);
+        }
+        .nav-item.drag-over-after {
+            border-bottom: 2px solid var(--primary);
+        }
+        .nav-item.drag-over-into {
+            background: var(--primary-light);
+            outline: 2px dashed var(--primary);
+            outline-offset: -2px;
+        }
+
 
         .sidebar-footer {
             padding: 12px 20px;
@@ -1008,6 +1025,9 @@
                 clearCatNameError();
             });
 
+            // 分类拖拽排序（事件委托）
+            initCategoryDrag();
+
         });
 
         async function browseFiles() {
@@ -1379,7 +1399,9 @@
                             <div class="nav-item" data-cat="${cat.id}" data-cat-name="${escapeHtml(cat.name)}" data-cat-color="${escapeHtml(cat.color)}" 
                                  ${parentIdAttr}
                                  data-cat-path="${currentPath}"
+                                 data-level="${level}"
                                  style="padding-left: ${12 + indent}px" 
+                                 draggable="true"
                                  onclick="filterByCategory(${cat.id}, '${escapeHtml(cat.name)}')">
                                 ${hasChildren ? `<span class="cat-toggle" onclick="event.stopPropagation();toggleCategory('${currentPath}')">${isCollapsed ? '▶' : '▼'}</span>` : '<span style="width:16px;display:inline-block"></span>'}
                                 <span class="dot" style="background:${cat.color}"></span>
@@ -1409,6 +1431,127 @@
                         </div>
                     `;
                 }
+            });
+        }
+
+        // ========== 分类拖拽排序 ==========
+        let dragState = { catId: null, dragLevel: 0 };
+
+        function initCategoryDrag() {
+            const container = document.getElementById('category-list');
+
+            container.addEventListener('dragstart', (e) => {
+                const item = e.target.closest('.nav-item');
+                if (!item || !item.dataset.cat) return;
+                dragState.catId = parseInt(item.dataset.cat);
+                dragState.dragLevel = parseInt(item.dataset.level || '0');
+                item.classList.add('dragging');
+                e.dataTransfer.effectAllowed = 'move';
+                e.dataTransfer.setData('text/plain', dragState.catId.toString());
+            });
+
+            container.addEventListener('dragend', (e) => {
+                const item = e.target.closest('.nav-item');
+                if (item) item.classList.remove('dragging');
+                // 清除所有拖拽状态
+                container.querySelectorAll('.nav-item').forEach(el => {
+                    el.classList.remove('dragging', 'drag-over-before', 'drag-over-after', 'drag-over-into');
+                });
+                dragState.catId = null;
+            });
+
+            container.addEventListener('dragover', (e) => {
+                e.preventDefault();
+                const item = e.target.closest('.nav-item');
+                if (!item || !item.dataset.cat || !dragState.catId) return;
+                if (parseInt(item.dataset.cat) === dragState.catId) return;
+
+                e.dataTransfer.dropEffect = 'move';
+
+                // 清除之前的样式
+                cleanDragOver();
+
+                const rect = item.getBoundingClientRect();
+                const y = e.clientY - rect.top;
+                const h = rect.height;
+                const ratio = y / h;
+
+                if (ratio < 0.25) {
+                    item.classList.add('drag-over-before');
+                } else if (ratio > 0.75) {
+                    item.classList.add('drag-over-after');
+                } else {
+                    item.classList.add('drag-over-into');
+                }
+            });
+
+            container.addEventListener('dragleave', (e) => {
+                const item = e.target.closest('.nav-item');
+                if (!item) return;
+                // 只在离开 item 本身时清除，避免子元素导致的闪烁
+                if (!item.contains(e.relatedTarget)) {
+                    item.classList.remove('drag-over-before', 'drag-over-after', 'drag-over-into');
+                }
+            });
+
+            container.addEventListener('drop', async (e) => {
+                e.preventDefault();
+                const item = e.target.closest('.nav-item');
+                if (!item || !item.dataset.cat || !dragState.catId) return;
+
+                const targetId = parseInt(item.dataset.cat);
+                if (targetId === dragState.catId) return;
+
+                const rect = item.getBoundingClientRect();
+                const y = e.clientY - rect.top;
+                const ratio = y / rect.height;
+
+                let position;
+                if (ratio < 0.25) {
+                    position = 'before';
+                } else if (ratio > 0.75) {
+                    position = 'after';
+                } else {
+                    position = 'into';
+                }
+
+                cleanDragOver();
+
+                try {
+                    const resp = await fetch(`/api/categories/${dragState.catId}/move`, {
+                        method: 'PUT',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ target_id: targetId, position }),
+                    });
+                    const data = await resp.json();
+                    if (resp.ok) {
+                        loadCategories();
+                        // 刷新下拉框
+                        const batchCat = document.getElementById('batch-category');
+                        const fileCat = document.getElementById('file-category');
+                        const parentCat = document.getElementById('new-cat-parent');
+                        if (batchCat) loadBatchCategoryOptions(batchCat.value);
+                        if (fileCat) loadCategoryOptions(fileCat.value);
+                        if (parentCat && document.getElementById('edit-cat-id').value) {
+                            const editId = parseInt(document.getElementById('edit-cat-id').value);
+                            loadParentCategoryOptions(parentCat.value, editId);
+                        }
+                        showToast('分类移动成功', 'success');
+                    } else {
+                        showToast(data.error || '移动失败', 'error');
+                    }
+                } catch (err) {
+                    showToast('网络错误，请重试', 'error');
+                }
+
+                dragState.catId = null;
+            });
+        }
+
+        function cleanDragOver() {
+            const container = document.getElementById('category-list');
+            container.querySelectorAll('.nav-item').forEach(el => {
+                el.classList.remove('drag-over-before', 'drag-over-after', 'drag-over-into');
             });
         }
 
