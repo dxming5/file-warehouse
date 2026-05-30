@@ -174,7 +174,7 @@
             flex: 1;
             display: flex;
             flex-direction: column;
-            overflow: hidden;
+            min-height: 0;
         }
         .topbar {
             background: var(--card-bg);
@@ -197,32 +197,17 @@
             border-radius: 20px;
         }
 
-        .topbar-actions {
+        .topbar .search-input {
             margin-left: auto;
-            display: flex;
-            gap: 8px;
-        }
-
-        /* ===== 搜索栏 ===== */
-        .search-bar {
-            display: flex;
-            align-items: center;
-            gap: 8px;
-            padding: 12px 24px;
-            background: var(--card-bg);
-            border-bottom: 1px solid var(--border);
-        }
-        .search-input {
-            flex: 1;
-            max-width: 400px;
-            padding: 9px 14px 9px 38px;
+            width: 220px;
+            padding: 8px 12px 8px 34px;
             border: 1px solid var(--border);
             border-radius: var(--radius-sm);
             font-size: 14px;
-            background: #f9fafb url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' fill='%239ca3af' viewBox='0 0 16 16'%3E%3Cpath d='M11.742 10.344a6.5 6.5 0 1 0-1.397 1.398h-.001l3.85 3.85a1 1 0 0 0 1.415-1.414l-3.85-3.85zm-5.242.156a5 5 0 1 1 0-10 5 5 0 0 1 0 10z'/%3E%3C/svg%3E") 12px center no-repeat;
+            background: #f9fafb url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' fill='%239ca3af' viewBox='0 0 16 16'%3E%3Cpath d='M11.742 10.344a6.5 6.5 0 1 0-1.397 1.398h-.001l3.85 3.85a1 1 0 0 0 1.415-1.414l-3.85-3.85zm-5.242.156a5 5 0 1 1 0-10 5 5 0 0 1 0 10z'/%3E%3C/svg%3E") 10px center no-repeat;
             transition: var(--transition);
         }
-        .search-input:focus {
+        .topbar .search-input:focus {
             outline: none;
             border-color: var(--primary);
             box-shadow: 0 0 0 3px rgba(79,70,229,.12);
@@ -232,21 +217,23 @@
         .file-list-container {
             flex: 1;
             overflow: auto;
-            padding: 16px 24px;
+            padding: 0 24px;
             min-width: 0;
+            min-height: 0;
         }
-        .file-list { display: flex; flex-direction: column; gap: 2px; min-width: max-content; }
+        .file-list { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
 
         .file-item {
             display: flex;
             align-items: center;
             gap: 0;
-            padding: 6px 14px;
+            padding: 4px 14px;
             background: var(--card-bg);
             border: 1px solid var(--border);
             border-radius: var(--radius-sm);
             transition: var(--transition);
             cursor: pointer;
+            min-width: 0;
         }
         .file-item:hover {
             border-color: #c7c9d0;
@@ -267,7 +254,7 @@
             display: flex;
             align-items: center;
             gap: 0;
-            padding: 8px 14px;
+            padding: 6px 14px 4px;
             font-size: 14px;
             font-weight: 600;
             color: var(--text-muted);
@@ -276,9 +263,10 @@
             position: sticky;
             top: 0;
             z-index: 5;
+            min-width: 0;
         }
         .file-list-header .h-icon { width: var(--col-icon); flex-shrink: 0; }
-        .file-list-header .h-title { width: var(--col-title); flex-shrink: 0; padding-right: 10px; cursor: pointer; user-select: none; }
+        .file-list-header .h-title { flex: 1; flex-shrink: 1; min-width: 80px; padding-right: 10px; cursor: pointer; user-select: none; }
         .file-list-header .h-title:hover { color: var(--primary); }
         .file-list-header .h-format { width: var(--col-format); flex-shrink: 0; text-align: center; cursor: pointer; user-select: none; }
         .file-list-header .h-format:hover { color: var(--primary); }
@@ -307,7 +295,7 @@
             width: 42px;
             text-align: center;
         }
-        .file-info { width: var(--col-title); flex-shrink: 0; min-width: 0; }
+        .file-info { flex: 1; flex-shrink: 1; min-width: 80px; }
         .file-info .name {
             font-size: 14px;
             font-weight: 600;
@@ -396,25 +384,57 @@
             width: var(--col-format);
             text-align: center;
         }
-        .read-status-select {
-            font-size: 14px;
-            border: none;
-            background: transparent;
-            color: var(--text-secondary);
-            cursor: pointer;
-            outline: none;
-            appearance: none;
-            -webkit-appearance: none;
-            width: var(--col-read);
+        .read-status-dropdown {
+            position: relative;
+            display: inline-flex;
             flex-shrink: 0;
-            text-align: center;
-            text-align-last: center;
         }
-        .read-status-select:focus { outline: none; }
-        .read-status-select.status-unread { color: var(--text-muted); }
-        .read-status-select.status-reading { color: #d97706; }
-        .read-status-select.status-read { color: #059669; }
-        .read-status-select option { background: #fff; color: var(--text); }
+        .read-status-tag {
+            font-size: 14px;
+            font-weight: 600;
+            white-space: nowrap;
+            flex-shrink: 0;
+            cursor: pointer;
+            user-select: none;
+            width: var(--col-read);
+            text-align: center;
+        }
+        .read-status-tag.status-unread { color: var(--text-muted); }
+        .read-status-tag.status-reading { color: #d97706; }
+        .read-status-tag.status-read { color: #059669; }
+        .read-status-dropdown-menu {
+            display: none;
+            position: absolute;
+            top: 100%;
+            left: 50%;
+            transform: translateX(-50%);
+            margin-top: 4px;
+            background: var(--card-bg);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            box-shadow: var(--shadow-lg);
+            z-index: 100;
+            min-width: 90px;
+        }
+        .read-status-dropdown-menu.show {
+            display: block;
+        }
+        .read-status-option {
+            padding: 6px 14px;
+            font-size: 14px;
+            cursor: pointer;
+            white-space: nowrap;
+            text-align: center;
+            transition: background var(--transition);
+        }
+        .read-status-option:hover {
+            background: var(--primary-light);
+        }
+        .read-status-option:first-child { border-radius: 8px 8px 0 0; }
+        .read-status-option:last-child { border-radius: 0 0 8px 8px; }
+        .read-status-option.status-unread { color: var(--text-muted); }
+        .read-status-option.status-reading { color: #d97706; }
+        .read-status-option.status-read { color: #059669; }
         .file-info .meta {
             font-size: 12px;
             color: var(--text-muted);
@@ -764,13 +784,7 @@
         <div class="topbar">
             <span class="title" id="current-title">全部文件</span>
             <span class="count" id="current-count">0 项</span>
-            <div class="topbar-actions">
-                <button class="btn btn-primary" onclick="openAddModal()">＋ 添加文件</button>
-            </div>
-        </div>
-
-        <!-- Search -->
-        <div class="search-bar">
+            <button class="btn btn-primary btn-sm" onclick="openAddModal()">＋ 添加文件</button>
             <input type="text" class="search-input" id="search-input" placeholder="搜索标题名..." oninput="debounceSearch()">
             <button class="btn btn-secondary btn-sm" onclick="verifyAll()" title="校验所有文件是否存在">🔍 校验</button>
         </div>
@@ -977,9 +991,10 @@
             if (!isOpen) menu.classList.add('show');
         }
 
-        // 全局点击关闭作者下拉
+        // 全局点击关闭所有自定义下拉
         document.addEventListener('click', () => {
             document.querySelectorAll('.author-dropdown-menu.show').forEach(m => m.classList.remove('show'));
+            document.querySelectorAll('.read-status-dropdown-menu.show').forEach(m => m.classList.remove('show'));
         });
 
         // ========== Init ==========
@@ -1572,8 +1587,8 @@
             });
         }
 
-        let currentSortBy = 'created_at';
-        let currentSortOrder = 'desc';
+        let currentSortBy = 'title';
+        let currentSortOrder = 'asc';
 
         function toggleSort(field) {
             if (currentSortBy === field) {
@@ -1671,11 +1686,14 @@
                             <div class="author-dropdown-menu">${authors.map(a => `<div class="author-option">${escapeHtml(a)}</div>`).join('')}</div>
                         </span><span class="tag-gap"></span>`;
                     })()}
-                    <select class="read-status-select status-${f.read_status || 'unread'}" onchange="event.stopPropagation();updateReadStatus(${f.id}, this)">
-                        <option value="unread" ${(f.read_status || 'unread') === 'unread' ? 'selected' : ''}>未阅读</option>
-                        <option value="reading" ${f.read_status === 'reading' ? 'selected' : ''}>在阅读</option>
-                        <option value="read" ${f.read_status === 'read' ? 'selected' : ''}>已阅读</option>
-                    </select>
+                    <div class="read-status-dropdown" onclick="event.stopPropagation();toggleReadStatusDropdown(this)">
+                        <span class="read-status-tag status-${f.read_status || 'unread'}">${statusLabels[f.read_status || 'unread']}</span>
+                        <div class="read-status-dropdown-menu">
+                            <div class="read-status-option status-unread" onclick="event.stopPropagation();updateReadStatus(${f.id}, 'unread', this.closest('.read-status-dropdown'))">未阅读</div>
+                            <div class="read-status-option status-reading" onclick="event.stopPropagation();updateReadStatus(${f.id}, 'reading', this.closest('.read-status-dropdown'))">在阅读</div>
+                            <div class="read-status-option status-read" onclick="event.stopPropagation();updateReadStatus(${f.id}, 'read', this.closest('.read-status-dropdown'))">已阅读</div>
+                        </div>
+                    </div>
                     <span class="tag-gap"></span>
                     <span class="year-tag" title="出版时间${f.year ? '' : '（未设置）'}">${f.year ? escapeHtml(f.year) : ''}</span>
                 </div>`;
@@ -1862,10 +1880,21 @@
             }
         }
 
-        async function updateReadStatus(id, selectEl) {
+        const statusLabels = { unread: '未阅读', reading: '在阅读', read: '已阅读' };
+
+        function toggleReadStatusDropdown(el) {
+            const menu = el.querySelector('.read-status-dropdown-menu');
+            const isOpen = menu.classList.contains('show');
+            document.querySelectorAll('.read-status-dropdown-menu.show').forEach(m => m.classList.remove('show'));
+            if (!isOpen) menu.classList.add('show');
+        }
+
+        async function updateReadStatus(id, status, dropdownEl) {
             try {
-                const status = selectEl.value;
-                selectEl.className = `read-status-select status-${status}`;
+                const tag = dropdownEl.querySelector('.read-status-tag');
+                tag.textContent = statusLabels[status];
+                tag.className = `read-status-tag status-${status}`;
+                dropdownEl.querySelector('.read-status-dropdown-menu').classList.remove('show');
                 const resp = await fetch(`/api/files/${id}/read-status`, {
                     method: 'PUT',
                     headers: { 'Content-Type': 'application/json' },

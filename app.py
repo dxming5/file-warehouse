@@ -239,8 +239,8 @@ def get_files():
     per_page = request.args.get('per_page', 50, type=int)
     search = request.args.get('search', '').strip()
     category_id = request.args.get('category_id', type=int)
-    sort_by = request.args.get('sort_by', 'created_at')
-    sort_order = request.args.get('sort_order', 'desc')
+    sort_by = request.args.get('sort_by', 'title')
+    sort_order = request.args.get('sort_order', 'asc')
     file_exists = request.args.get('file_exists', type=int)
     favorite = request.args.get('favorite', type=int)
 
@@ -422,16 +422,18 @@ def update_file(file_id):
     year = data.get('year', file['year']).strip()
     category_id = data.get('category_id', file['category_id'])
 
-    # 支持修改文件路径
+    # 支持修改文件路径（与添加逻辑保持一致的规范化处理）
     new_path = data.get('file_path', file['file_path']).strip()
-    if new_path != file['file_path']:
-        info = get_file_info(new_path)
+    if new_path and new_path != file['file_path']:
+        abs_path = os.path.normpath(new_path)
+        rel_path = to_relative_path(abs_path)
+        info = get_file_info(abs_path)
         db.execute("""
             UPDATE files SET title=?, file_path=?, file_name=?, file_ext=?, file_size=?,
             tags=?, author=?, year=?, category_id=?, file_exists=?,
             updated_at=datetime('now','localtime')
             WHERE id=?
-        """, (title, new_path, info['name'], info['ext'], info['size'],
+        """, (title, rel_path, info['name'], info['ext'], info['size'],
               tags, author, year, category_id, info['exists'], file_id))
     else:
         db.execute("""
