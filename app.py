@@ -595,6 +595,21 @@ def update_category(cat_id):
     icon = data.get('icon', '📁')
     parent_id = data.get('parent_id')
     
+    # 检查同级分类下是否存在同名分类
+    if parent_id is not None:
+        sibling = db.execute(
+            "SELECT id FROM categories WHERE name = ? AND parent_id = ? AND id != ?",
+            (name, parent_id, cat_id)
+        ).fetchone()
+    else:
+        sibling = db.execute(
+            "SELECT id FROM categories WHERE name = ? AND parent_id IS NULL AND id != ?",
+            (name, cat_id)
+        ).fetchone()
+    
+    if sibling:
+        return jsonify({'error': '同级分类下已存在同名分类，请修改名称'}), 409
+    
     # 防循环引用检查
     if parent_id and parent_id != cat_id:
         if _is_descendant(db, cat_id, parent_id):

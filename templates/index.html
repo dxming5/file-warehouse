@@ -868,6 +868,7 @@
             <div class="form-group">
                 <label>分类名称 *</label>
                 <input type="text" id="new-cat-name" placeholder="如：工作文档、个人项目...">
+                <div style="color:var(--danger);font-size:12px;margin-top:4px;display:none" id="cat-name-error"></div>
             </div>
             <div class="form-group">
                 <label>父分类（可选）</label>
@@ -1002,6 +1003,11 @@
                 if (e.target === document.getElementById('cat-modal-overlay')) closeCatModal();
             });
 
+            // 分类名输入时清除错误状态
+            document.getElementById('new-cat-name').addEventListener('input', () => {
+                clearCatNameError();
+            });
+
         });
 
         async function browseFiles() {
@@ -1107,6 +1113,7 @@
             document.getElementById('edit-cat-parent-id').value = parentId || '';
             document.getElementById('new-cat-name').value = '';
             document.getElementById('cat-save-btn').textContent = '创建';
+            clearCatNameError();
             const defaultColor = '#4a90d9';
             document.getElementById('new-cat-color').value = defaultColor;
             document.querySelectorAll('.color-dot').forEach(d => d.classList.remove('picked'));
@@ -1132,6 +1139,7 @@
             document.getElementById('edit-cat-parent-id').value = parentId || '';
             document.getElementById('new-cat-name').value = name;
             document.getElementById('cat-save-btn').textContent = '保存';
+            clearCatNameError();
             document.getElementById('new-cat-color').value = color;
             document.querySelectorAll('.color-dot').forEach(d => d.classList.remove('picked'));
             const dot = document.querySelector('.color-dot[data-color="' + color + '"]');
@@ -1165,35 +1173,19 @@
                     }
                 });
                 
-                // 递归添加选项（标准树形展示）
-                function addOptions(catList, level, parentPrefixStr) {
-                    catList.forEach((cat, index) => {
+                // 递归添加选项（纯缩进，不用树形连接线）
+                // NOTE: HTML <option> 会自动折叠前导空格，所以用 &nbsp; 代替空格做缩进
+                function addOptions(catList, level, indentStr) {
+                    catList.forEach(cat => {
                         if (cat.id === excludeId) return; // 排除自己
                         
-                        const isLast = index === catList.length - 1;
-                        
-                        // 构建当前行的前缀
-                        let currentPrefix = '';
-                        
-                        if (level === 0) {
-                            // 顶级分类：📁 图标
-                            currentPrefix = ' ';
-                        } else {
-                            // 二级及以上：父级前缀字符串 + 当前连接符
-                            currentPrefix = parentPrefixStr + (isLast ? '└─ ' : '├─ ');
-                        }
+                        // 上层缩进 + 当前层四个 &nbsp; 作为缩进
+                        const currentPrefix = indentStr + '&nbsp;&nbsp;&nbsp;&nbsp;';
                         
                         html += `<option value="${cat.id}" ${cat.id == selectedParentId ? 'selected' : ''}>${currentPrefix}${escapeHtml(cat.name)}</option>`;
                         
-                        // 递归处理子分类
                         if (cat.children.length > 0) {
-                            // 为子分类构建新的前缀字符串
-                            let newPrefixStr = parentPrefixStr;
-                            if (level > 0) {
-                                // 添加当前层的垂直连线或空格
-                                newPrefixStr += isLast ? '   ' : '│  ';
-                            }
-                            addOptions(cat.children, level + 1, newPrefixStr);
+                            addOptions(cat.children, level + 1, currentPrefix);
                         }
                     });
                 }
@@ -1203,8 +1195,22 @@
             });
         }
 
+        function clearCatNameError() {
+            const nameInput = document.getElementById('new-cat-name');
+            const nameError = document.getElementById('cat-name-error');
+            if (nameInput) {
+                nameInput.style.borderColor = '';
+                nameInput.style.boxShadow = '';
+            }
+            if (nameError) {
+                nameError.textContent = '';
+                nameError.style.display = 'none';
+            }
+        }
+
         function closeCatModal() {
             document.getElementById('cat-modal-overlay').classList.remove('show');
+            clearCatNameError();
             // 重置父分类选择器为隐藏状态
             const parentSelectGroup = document.getElementById('new-cat-parent').closest('.form-group');
             if (parentSelectGroup) {
@@ -1269,6 +1275,15 @@
                 loadFiles();
                 showToast(isEdit ? '分类更新成功' : '分类创建成功', 'success');
             } else {
+                // 同名冲突：在名称字段行内提示
+                if (resp.status === 409 || (data.error && data.error.includes('同名'))) {
+                    const nameInput = document.getElementById('new-cat-name');
+                    const nameError = document.getElementById('cat-name-error');
+                    nameInput.style.borderColor = 'var(--danger)';
+                    nameInput.style.boxShadow = '0 0 0 3px rgba(239,68,68,.15)';
+                    nameError.textContent = data.error;
+                    nameError.style.display = 'block';
+                }
                 showToast(data.error || '操作失败', 'error');
             }
         }
@@ -1302,9 +1317,32 @@
         function loadBatchCategoryOptions(selectedId) {
             fetch('/api/categories').then(r => r.json()).then(cats => {
                 const sel = document.getElementById('batch-category');
-                sel.innerHTML = '<option value="">-- 不指定分类 --</option>' + cats.map(c =>
-                    `<option value="${c.id}" ${c.id == selectedId ? 'selected' : ''}>${c.name}</option>`
-                ).join('');
+                let html = '<option value="">-- 不指定分类 --</option>';
+
+                // 构建树形结构
+                const catMap = {};
+                cats.forEach(c => { catMap[c.id] = { ...c, children: [] }; });
+                const rootCats = [];
+                cats.forEach(c => {
+                    if (c.parent_id && catMap[c.parent_id]) {
+                        catMap[c.parent_id].children.push(catMap[c.id]);
+                    } else {
+                        rootCats.push(catMap[c.id]);
+                    }
+                });
+
+                function addOptions(catList, level, indentStr) {
+                    catList.forEach(cat => {
+                        const currentPrefix = indentStr + '&nbsp;&nbsp;&nbsp;&nbsp;';
+                        html += `<option value="${cat.id}" ${cat.id == selectedId ? 'selected' : ''}>${currentPrefix}${escapeHtml(cat.name)}</option>`;
+                        if (cat.children.length > 0) {
+                            addOptions(cat.children, level + 1, currentPrefix);
+                        }
+                    });
+                }
+
+                addOptions(rootCats, 0, '');
+                sel.innerHTML = html;
             });
         }
 
@@ -1564,9 +1602,32 @@
         function loadCategoryOptions(selectedId) {
             fetch('/api/categories').then(r => r.json()).then(cats => {
                 const sel = document.getElementById('file-category');
-                sel.innerHTML = '<option value="">-- 无分类 --</option>' + cats.map(c =>
-                    `<option value="${c.id}" ${c.id === selectedId ? 'selected' : ''}>${c.name}</option>`
-                ).join('');
+                let html = '<option value="">-- 无分类 --</option>';
+
+                // 构建树形结构
+                const catMap = {};
+                cats.forEach(c => { catMap[c.id] = { ...c, children: [] }; });
+                const rootCats = [];
+                cats.forEach(c => {
+                    if (c.parent_id && catMap[c.parent_id]) {
+                        catMap[c.parent_id].children.push(catMap[c.id]);
+                    } else {
+                        rootCats.push(catMap[c.id]);
+                    }
+                });
+
+                function addOptions(catList, level, indentStr) {
+                    catList.forEach(cat => {
+                        const currentPrefix = indentStr + '&nbsp;&nbsp;&nbsp;&nbsp;';
+                        html += `<option value="${cat.id}" ${cat.id === selectedId ? 'selected' : ''}>${currentPrefix}${escapeHtml(cat.name)}</option>`;
+                        if (cat.children.length > 0) {
+                            addOptions(cat.children, level + 1, currentPrefix);
+                        }
+                    });
+                }
+
+                addOptions(rootCats, 0, '');
+                sel.innerHTML = html;
             });
         }
 
