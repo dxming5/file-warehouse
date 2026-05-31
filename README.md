@@ -46,10 +46,12 @@ file-warehouse/
 ├── app.py                 # Flask 后端 + pywebview 桌面窗口
 ├── file_warehouse.db      # SQLite 数据库（自动生成）
 ├── requirements.txt       # Python 依赖
+├── icon.ico               # 应用图标
 ├── 启动.pyw               # 一键启动（无控制台，推荐）
 ├── 启动.bat               # 带控制台启动（调试用）
 ├── 打包.bat               # PyInstaller 打包脚本
-├── README.md              # 本文件
+├── README.md              # 使用说明
+├── 数据模型设计策略.md      # 数据模型设计文档
 └── templates/
     └── index.html         # 前端单页面（原生 JS，无框架）
 ```
@@ -85,6 +87,7 @@ file-warehouse/
 | POST | `/api/files/batch-add` | 批量添加文件 |
 | PUT | `/api/files/<id>` | 更新文件记录 |
 | DELETE | `/api/files/<id>` | 移除文件记录（不删除源文件） |
+| POST | `/api/files/batch-delete` | 批量移除文件记录 |
 | POST | `/api/files/<id>/open` | 打开源文件 |
 | POST | `/api/files/<id>/locate` | 在资源管理器中定位 |
 | POST | `/api/files/<id>/verify` | 校验单个文件 |
@@ -98,9 +101,9 @@ file-warehouse/
 |------|------|------|
 | GET | `/api/categories` | 获取分类列表（含文件计数） |
 | POST | `/api/categories` | 新建分类（支持指定父分类） |
-| PUT | `/api/categories/<id>` | 更新分类（防循环引用） |
+| PUT | `/api/categories/<id>` | 更新分类（防循环引用、防同级重名） |
 | DELETE | `/api/categories/<id>` | 删除分类及所有子分类（递归删除关联文件） |
-| PUT | `/api/categories/<id>/move` | 拖拽移动/排序分类
+| PUT | `/api/categories/<id>/move` | 拖拽移动/排序分类（before/after/into） |
 
 ### 其他
 
@@ -141,5 +144,5 @@ files 表核心字段：
 - **单文件分发**：支持 PyInstaller 打包为 exe，双击即用
 - **原生文件选择**：通过 tkinter 获取文件真实绝对路径
 - **相对路径存储**：文件路径以相对路径入库，方便整体迁移
-- **列宽自适应**：表格各列宽度根据窗口大小动态计算，标题列弹性伸缩
+- **列宽自适应**：表格各列宽度根据窗口大小通过 CSS grid 弹性自适应
 - **自定义下拉**：作者、阅读状态使用自定义下拉组件，风格统一且不依赖原生控件
