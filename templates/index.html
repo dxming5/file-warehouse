@@ -308,6 +308,7 @@
         }
         .author-tag {
             font-size: 14px;
+            font-weight: 600;
             color: var(--text-secondary);
             white-space: nowrap;
             flex-shrink: 0;
@@ -343,6 +344,9 @@
             overflow-y: auto;
         }
         .author-dropdown-menu.show {
+            display: block;
+        }
+        .author-dropdown:hover .author-dropdown-menu {
             display: block;
         }
         .author-option {
@@ -589,6 +593,7 @@
             box-shadow: 0 0 0 3px rgba(79,70,229,.12);
         }
         .form-group textarea { resize: vertical; min-height: 70px; }
+        #file-author { font-weight: 600; }
         .modal-actions {
             display: flex;
             gap: 8px;
@@ -981,16 +986,8 @@
             loadCategories();
         }
 
-        function toggleAuthorDropdown(el) {
-            const menu = el.querySelector('.author-dropdown-menu');
-            const isOpen = menu.classList.contains('show');
-            document.querySelectorAll('.author-dropdown-menu.show, .read-status-dropdown-menu.show').forEach(m => m.classList.remove('show'));
-            if (!isOpen) menu.classList.add('show');
-        }
-
-        // 全局点击关闭所有自定义下拉
+        // 全局点击关闭所有自定义下拉（仅阅读状态）
         document.addEventListener('click', () => {
-            document.querySelectorAll('.author-dropdown-menu.show').forEach(m => m.classList.remove('show'));
             document.querySelectorAll('.read-status-dropdown-menu.show').forEach(m => m.classList.remove('show'));
         });
 
@@ -1678,10 +1675,10 @@
                     <span class="tag-gap"></span>
                     ${(() => {
                         const authors = getAuthors(f.author);
+                        const allAuthors = authors.join('; ');
                         if (authors.length === 0) return `<span class="author-tag"></span><span class="tag-gap"></span>`;
-                        if (authors.length === 1) return `<span class="author-tag" title="作者">${escapeHtml(authors[0])}</span><span class="tag-gap"></span>`;
-                        return `<span class="author-dropdown" onclick="event.stopPropagation();toggleAuthorDropdown(this)">
-                            <span class="author-tag has-more" title="作者">${escapeHtml(authors[0])}</span>
+                        return `<span class="author-dropdown">
+                            <span class="author-tag has-more" title="${escapeHtml(allAuthors)}">${escapeHtml(authors[0])}</span>
                             <div class="author-dropdown-menu">${authors.map(a => `<div class="author-option">${escapeHtml(a)}</div>`).join('')}</div>
                         </span><span class="tag-gap"></span>`;
                     })()}
