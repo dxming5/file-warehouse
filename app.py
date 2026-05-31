@@ -6,13 +6,11 @@
 """
 import os
 import sys
-import json
 import sqlite3
 import subprocess
 import platform
-import hashlib
 import threading
-from datetime import datetime, timedelta
+from datetime import datetime
 from pathlib import Path
 from flask import Flask, render_template, request, jsonify, g
 import pypinyin
@@ -86,11 +84,6 @@ def init_db():
         CREATE INDEX IF NOT EXISTS idx_files_tags ON files(tags);
         CREATE INDEX IF NOT EXISTS idx_files_file_exists ON files(file_exists);
         CREATE INDEX IF NOT EXISTS idx_categories_parent ON categories(parent_id);
-
-        CREATE TABLE IF NOT EXISTS settings (
-            key TEXT PRIMARY KEY,
-            value TEXT
-        );
     """)
     # 确保 year 列存在（兼容已有数据库）
     try:
