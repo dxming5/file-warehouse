@@ -108,10 +108,11 @@ def init_db():
 # ---------- 工具函数 ----------
 
 def get_file_info(file_path):
-    """获取文件基本信息"""
-    try:
-        p = Path(file_path)
-        if p.exists():
+    """获取文件基本信息（兼容 Windows 目录联接/junction）"""
+    p = Path(file_path)
+    # 使用 os.path.exists 替代 Path.exists()，对 Windows 目录联接(mklink /J)兼容性更好
+    if os.path.exists(file_path):
+        try:
             stat = p.stat()
             return {
                 'name': p.name,
@@ -121,9 +122,16 @@ def get_file_info(file_path):
                 'exists': 1,
                 'modified': datetime.fromtimestamp(stat.st_mtime).strftime('%Y-%m-%d %H:%M'),
             }
-    except Exception:
-        pass
-    p = Path(file_path)
+        except (OSError, PermissionError):
+            # stat 可能因 junction 权限问题失败，但文件确实存在
+            return {
+                'name': p.name,
+                'stem': p.stem,
+                'ext': p.suffix.lower(),
+                'size': 0,
+                'exists': 1,
+                'modified': '',
+            }
     return {
         'name': p.name,
         'stem': p.stem,
@@ -175,20 +183,35 @@ def open_folder(file_path):
         return False
 
 def verify_files(db):
-    """批量校验文件是否存在"""
+    """批量校验文件是否存在（兼容 Windows 目录联接/junction）"""
+    # 1. 检查已标记为存在的文件，确认是否真的丢失
     rows = db.execute("SELECT id, file_path FROM files WHERE file_exists = 1").fetchall()
-    to_update = []
+    lost_ids = []
     for row in rows:
         if not os.path.exists(to_absolute_path(row['file_path'])):
-            to_update.append(row['id'])
-    if to_update:
-        placeholders = ','.join('?' * len(to_update))
+            lost_ids.append(row['id'])
+    if lost_ids:
+        placeholders = ','.join('?' * len(lost_ids))
         db.execute(
             f"UPDATE files SET file_exists = 0, last_checked = datetime('now','localtime') WHERE id IN ({placeholders})",
-            to_update
+            lost_ids
         )
+
+    # 2. 检查已标记为丢失的文件，若实际存在则修正（解决 junction 误判问题）
+    missing_rows = db.execute("SELECT id, file_path FROM files WHERE file_exists = 0").fetchall()
+    recovered_ids = []
+    for row in missing_rows:
+        if os.path.exists(to_absolute_path(row['file_path'])):
+            recovered_ids.append(row['id'])
+    if recovered_ids:
+        placeholders = ','.join('?' * len(recovered_ids))
+        db.execute(
+            f"UPDATE files SET file_exists = 1, last_checked = datetime('now','localtime') WHERE id IN ({placeholders})",
+            recovered_ids
+        )
+
     db.commit()
-    return len(to_update)
+    return len(lost_ids), len(recovered_ids)
 
 # ---------- API 路由 ----------
 
@@ -524,6 +547,11 @@ def open_file(file_id):
         db.commit()
         return jsonify({'error': '文件不存在，可能已被移动或删除'}), 404
 
+    # 文件存在，若之前被误标记为丢失则修正
+    if file['file_exists'] == 0:
+        db.execute("UPDATE files SET file_exists=1, last_checked=datetime('now','localtime') WHERE id=?", (file_id,))
+        db.commit()
+
     success = open_file_with_default(abs_path)
     if success:
         return jsonify({'message': '已打开'})
@@ -562,8 +590,14 @@ def verify_file(file_id):
 def verify_all_files():
     """批量校验所有文件"""
     db = get_db()
-    count = verify_files(db)
-    return jsonify({'message': f'校验完成，{count} 个文件不存在', 'missing': count})
+    lost_count, recovered_count = verify_files(db)
+    msg_parts = []
+    if lost_count:
+        msg_parts.append(f'{lost_count} 个文件不存在')
+    if recovered_count:
+        msg_parts.append(f'{recovered_count} 个文件已恢复')
+    msg = '校验完成：' + '，'.join(msg_parts) if msg_parts else '校验完成，所有文件状态正常'
+    return jsonify({'message': msg, 'missing': lost_count, 'recovered': recovered_count})
 
 @app.route('/api/files/<int:file_id>/favorite', methods=['POST'])
 def toggle_favorite(file_id):
