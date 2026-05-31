@@ -5,7 +5,7 @@ os.chdir(os.path.dirname(os.path.abspath(__file__)))
 
 # 静默安装依赖（已安装则跳过）
 subprocess.run(
-    [sys.executable, '-m', 'pip', 'install', 'flask', 'pywebview', '-q'],
+    [sys.executable, '-m', 'pip', 'install', 'flask', 'pywebview', 'pypinyin', 'natsort', '-q'],
     stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL
 )
 

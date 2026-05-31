@@ -15,6 +15,8 @@ import threading
 from datetime import datetime, timedelta
 from pathlib import Path
 from flask import Flask, render_template, request, jsonify, g
+import pypinyin
+from natsort import natsort_keygen, ns
 
 # 处理 PyInstaller 打包后的路径
 if getattr(sys, 'frozen', False):
@@ -275,14 +277,39 @@ def get_files():
 
     where = " AND ".join(conditions)
 
-    total = db.execute(f"SELECT COUNT(*) FROM files WHERE {where}", params).fetchone()[0]
     offset = (page - 1) * per_page
-    rows = db.execute(
-        f"SELECT f.*, c.name as category_name, c.color as category_color "
-        f"FROM files f LEFT JOIN categories c ON f.category_id = c.id "
-        f"WHERE {where} ORDER BY {sort_by} {sort_order} LIMIT ? OFFSET ?",
-        params + [per_page, offset]
-    ).fetchall()
+
+    if sort_by == 'title':
+        # 模拟 Windows 排序：英文/数字在前 → 中文在后（中文转拼音后自然排序）
+        all_rows = db.execute(
+            f"SELECT f.*, c.name as category_name, c.color as category_color "
+            f"FROM files f LEFT JOIN categories c ON f.category_id = c.id "
+            f"WHERE {where}",
+            params
+        ).fetchall()
+
+        def _title_sort_key(r):
+            t = (r['title'] or '')
+            try:
+                pinyin_str = ''.join(pypinyin.lazy_pinyin(t))
+            except Exception:
+                pinyin_str = t
+            # 以中文开头 → 排到后面；英文/数字开头 → 排前面
+            is_cjk_start = 1 if (t and '\u4e00' <= t[0] <= '\u9fff') else 0
+            return _natsort_key((is_cjk_start, pinyin_str))
+
+        _natsort_key = natsort_keygen(alg=ns.IGNORECASE)
+        all_rows = sorted(all_rows, key=_title_sort_key, reverse=(sort_order == 'desc'))
+        total = len(all_rows)
+        rows = all_rows[offset:offset + per_page]
+    else:
+        total = db.execute(f"SELECT COUNT(*) FROM files WHERE {where}", params).fetchone()[0]
+        rows = db.execute(
+            f"SELECT f.*, c.name as category_name, c.color as category_color "
+            f"FROM files f LEFT JOIN categories c ON f.category_id = c.id "
+            f"WHERE {where} ORDER BY {sort_by} {sort_order} LIMIT ? OFFSET ?",
+            params + [per_page, offset]
+        ).fetchall()
 
     files = []
     for r in rows:
@@ -862,25 +889,40 @@ def browse_files():
 
 if __name__ == '__main__':
     import time
+    import socket
     import webview
 
     # 初始化数据库
     init_db()
 
+    # 自动寻找可用端口，避免冲突
+    def find_available_port(start=5000, max_attempts=100):
+        for port in range(start, start + max_attempts):
+            with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+                if s.connect_ex(('127.0.0.1', port)) != 0:
+                    return port
+        raise RuntimeError(f'未能在 {start}~{start + max_attempts - 1} 中找到可用端口')
+
+    PORT = find_available_port()
+
     # 在后台线程启动 Flask
     def run_flask():
-        app.run(host='127.0.0.1', port=5000, debug=False)
+        app.run(host='127.0.0.1', port=PORT, debug=False)
 
-    t = threading.Thread(target=run_flask, daemon=True)
-    t.start()
+    flask_thread = threading.Thread(target=run_flask, daemon=True)
+    flask_thread.start()
 
-    # 等待 Flask 就绪
-    time.sleep(0.5)
+    # 等待 Flask 就绪（轮询直到连接成功）
+    for _ in range(30):
+        time.sleep(0.1)
+        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+            if s.connect_ex(('127.0.0.1', PORT)) == 0:
+                break
 
     # 创建原生桌面窗口
     webview.create_window(
         title='个人文件仓库管理系统 - dxm',
-        url='http://127.0.0.1:5000',
+        url=f'http://127.0.0.1:{PORT}',
         width=1280,
         height=800,
         min_size=(900, 600),

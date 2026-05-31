@@ -1,3 +1,5 @@
 flask>=3.0
 pywebview>=5.0
 pyinstaller>=6.0
+pypinyin>=0.50
+natsort>=8.4
