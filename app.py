@@ -29,6 +29,11 @@ DB_PATH = os.path.join(BASE_DIR, 'file_warehouse.db')
 
 app = Flask(__name__, template_folder=TEMPLATE_DIR)
 
+# 用于取消正在进行的文件选择对话框
+_browse_cancelled = False
+# 后台校验状态
+_bg_verify_done = False
+
 def get_db():
     if 'db' not in g:
         g.db = sqlite3.connect(DB_PATH)
@@ -587,6 +592,16 @@ def locate_file(file_id):
         return jsonify({'error': '记录不存在'}), 404
 
     abs_path = to_absolute_path(file['file_path'])
+    if not os.path.exists(abs_path):
+        db.execute("UPDATE files SET file_exists=0 WHERE id=?", (file_id,))
+        db.commit()
+        return jsonify({'error': '路径不存在，可能已被移动或删除'}), 404
+
+    # 存在，若之前被误标记为丢失则修正
+    if file['file_exists'] == 0:
+        db.execute("UPDATE files SET file_exists=1 WHERE id=?", (file_id,))
+        db.commit()
+
     success = open_folder(abs_path)
     if success:
         return jsonify({'message': '已定位'})
@@ -906,6 +921,8 @@ def get_stats():
 @app.route('/api/browse-files', methods=['POST'])
 def browse_files():
     """打开原生文件/文件夹选择对话框（多选），返回选中路径的真实信息"""
+    global _browse_cancelled
+    _browse_cancelled = False
     try:
         import tkinter as tk
         from tkinter import filedialog
@@ -914,6 +931,16 @@ def browse_files():
         root.withdraw()
         root.attributes('-topmost', True)
 
+        def _check_cancel():
+            if _browse_cancelled:
+                try:
+                    root.destroy()
+                except Exception:
+                    pass
+            else:
+                root.after(200, _check_cancel)
+        root.after(200, _check_cancel)
+
         # 支持选择文件和文件夹
         data = request.get_json() or {}
         if data.get('type') == 'folder':
@@ -921,6 +948,14 @@ def browse_files():
             file_paths = [folder_path] if folder_path else []
         else:
             file_paths = filedialog.askopenfilenames(title='选择要添加的文件')
+        
+        # 已被取消则不再处理结果
+        if _browse_cancelled:
+            try:
+                root.destroy()
+            except Exception:
+                pass
+            return jsonify({'files': []})
         
         root.destroy()
         
@@ -943,6 +978,21 @@ def browse_files():
         return jsonify({'error': f'选择失败: {str(e)}'}), 500
 
 
+@app.route('/api/cancel-browse', methods=['POST'])
+def cancel_browse():
+    """取消当前正在进行的文件选择对话框"""
+    global _browse_cancelled
+    _browse_cancelled = True
+    return jsonify({'status': 'ok'})
+
+
+@app.route('/api/verify-status', methods=['GET'])
+def verify_status():
+    """查询后台校验是否完成"""
+    global _bg_verify_done
+    return jsonify({'done': _bg_verify_done})
+
+
 
 
 
@@ -953,6 +1003,22 @@ if __name__ == '__main__':
 
     # 初始化数据库
     init_db()
+
+    # 后台静默校验所有文件状态（不阻塞启动）
+    def _bg_verify():
+        global _bg_verify_done
+        try:
+            db = sqlite3.connect(DB_PATH)
+            db.row_factory = sqlite3.Row
+            db.execute("PRAGMA journal_mode=WAL")
+            verify_files(db)
+            db.close()
+        except Exception:
+            import traceback
+            traceback.print_exc()
+        finally:
+            _bg_verify_done = True
+    threading.Thread(target=_bg_verify, daemon=True).start()
 
     # 自动寻找可用端口，避免冲突
     def find_available_port(start=5000, max_attempts=100):

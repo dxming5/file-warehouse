@@ -994,6 +994,18 @@
             loadCategories();
             loadFiles();
             loadStats();
+
+            // 后台校验完成后自动刷新
+            (function pollVerify() {
+                fetch('/api/verify-status').then(r => r.json()).then(data => {
+                    if (data.done) {
+                        loadFiles();
+                        loadStats();
+                    } else {
+                        setTimeout(pollVerify, 2000);
+                    }
+                }).catch(() => {});
+            })();
             
             // 初始化时隐藏父分类选择器
             const parentSelectGroup = document.getElementById('new-cat-parent').closest('.form-group');
@@ -1108,6 +1120,8 @@
             document.getElementById('batch-modal-overlay').classList.remove('show');
             batchFiles = [];
             updateBatchFileList();
+            // 通知后端关闭可能正在显示的 tkinter 文件选择对话框
+            fetch('/api/cancel-browse', { method: 'POST' }).catch(() => {});
         }
 
         async function submitBatchAdd() {
@@ -1842,18 +1856,27 @@
             );
         }
 
-        function openFile(id) {
-            fetch(`/api/files/${id}/open`, { method: 'POST' }).then(r => r.json()).then(data => {
-                if (!r.ok) showToast(data.error, 'error');
+        async function openFile(id) {
+            const r = await fetch(`/api/files/${id}/open`, { method: 'POST' });
+            const data = await r.json();
+            if (!r.ok) {
+                showToast(data.error, 'error');
                 loadFiles();
                 loadStats();
-            });
+            } else {
+                loadFiles();
+                loadStats();
+            }
         }
 
-        function locateFile(id) {
-            fetch(`/api/files/${id}/locate`, { method: 'POST' }).then(r => r.json()).then(data => {
-                if (!r.ok) showToast(data.error, 'error');
-            });
+        async function locateFile(id) {
+            const r = await fetch(`/api/files/${id}/locate`, { method: 'POST' });
+            const data = await r.json();
+            if (!r.ok) {
+                showToast(data.error, 'error');
+                loadFiles();
+                loadStats();
+            }
         }
 
         function verifyAll() {
