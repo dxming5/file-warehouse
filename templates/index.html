@@ -786,7 +786,7 @@
             <span class="count" id="current-count">0 项</span>
             <input type="text" class="search-input" id="search-input" placeholder="搜索标题名..." oninput="debounceSearch()">
             <button class="btn btn-secondary btn-sm" onclick="verifyAll()" title="校验所有文件是否存在">🔍 校验</button>
-            <button class="btn btn-primary btn-sm" onclick="openAddModal()">＋ 添加文件</button>
+            <button class="btn btn-primary btn-sm" onclick="openAddModal()">＋ 添加</button>
         </div>
 
         <!-- File List -->
@@ -803,8 +803,8 @@
             <div class="empty-state" id="empty-state" style="display:none">
                 <div class="icon">📂</div>
                 <h3>仓库还是空的</h3>
-                <p>点击"添加文件"开始管理你的文件吧</p>
-                <button class="btn btn-primary" onclick="openAddModal()">＋ 添加第一个文件</button>
+                <p>点击"添加"开始管理你的文件或文件夹吧</p>
+                <button class="btn btn-primary" onclick="openAddModal()">＋ 添加第一个</button>
             </div>
         </div>
 
@@ -814,8 +814,8 @@
 
     <!-- 右键菜单（文件） -->
     <div class="context-menu" id="context-menu">
-        <div class="context-menu-item" onclick="ctxOpenFile()">📂 打开文件</div>
-        <div class="context-menu-item" onclick="ctxLocateFile()">📁 定位文件</div>
+        <div class="context-menu-item" onclick="ctxOpenFile()">📂 打开</div>
+        <div class="context-menu-item" onclick="ctxLocateFile()">📁 定位</div>
         <div class="context-menu-divider"></div>
         <div class="context-menu-item" onclick="ctxEditFile()">✏️ 编辑</div>
         <div class="context-menu-item danger" onclick="ctxDeleteFile()">🗑️ 移出仓库</div>
@@ -866,9 +866,10 @@
     <!-- 添加文件弹窗 -->
     <div class="modal-overlay" id="batch-modal-overlay">
         <div class="modal" style="width:650px">
-            <h3>📥 添加文件到仓库</h3>
+            <h3>📥 添加文件/文件夹到仓库</h3>
             <div style="display:flex;gap:8px;margin-bottom:12px">
                 <button type="button" class="btn btn-primary btn-sm" onclick="browseFiles()">📄 选择文件</button>
+                <button type="button" class="btn btn-primary btn-sm" onclick="browseFolder()">📁 选择文件夹</button>
             </div>
 
             <div class="form-group">
@@ -1037,11 +1038,23 @@
         });
 
         async function browseFiles() {
+            await browsePath('file');
+        }
+
+        async function browseFolder() {
+            await browsePath('folder');
+        }
+
+        async function browsePath(type) {
             try {
-                const resp = await fetch('/api/browse-files', { method: 'POST' });
+                const resp = await fetch('/api/browse-files', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ type }),
+                });
                 const data = await resp.json();
                 if (!resp.ok) {
-                    showToast(data.error || '选择文件失败', 'error');
+                    showToast(data.error || '选择失败', 'error');
                     return;
                 }
                 if (data.files && data.files.length > 0) {
@@ -1050,14 +1063,15 @@
                             batchFiles.push({
                                 name: f.name,
                                 path: f.path,
-                                folder: '',
+                                folder: f.is_folder ? f.name : '',
+                                is_folder: f.is_folder || 0,
                             });
                         }
                     });
                     updateBatchFileList();
                 }
             } catch (err) {
-                showToast('选择文件失败: ' + err.message, 'error');
+                showToast('选择失败: ' + err.message, 'error');
             }
         }
 
@@ -1067,17 +1081,18 @@
             countEl.textContent = batchFiles.length;
 
             if (batchFiles.length === 0) {
-                container.innerHTML = '<div style="text-align:center;color:var(--text-muted);padding:20px;font-size:13px">请点击上方按钮选择文件</div>';
+                container.innerHTML = '<div style="text-align:center;color:var(--text-muted);padding:20px;font-size:13px">请点击上方按钮选择文件或文件夹</div>';
                 return;
             }
 
             container.innerHTML = batchFiles.map((f, idx) => {
-                const icon = getFileIcon('.' + (f.name.split('.').pop() || ''));
+                const icon = f.is_folder ? '📁' : getFileIcon('.' + (f.name.split('.').pop() || ''));
+                const typeLabel = f.is_folder ? '📁 文件夹' : '✅';
                 return `
                 <div class="batch-file-item">
                     <span>${icon}</span>
                     <span class="bf-name">${escapeHtml(f.name)}</span>
-                    <span class="bf-folder" style="color:var(--success)">✅ ${escapeHtml(f.path)}</span>
+                    <span class="bf-folder" style="color:var(--success)">${typeLabel} ${escapeHtml(f.path)}</span>
                     <button class="btn-icon danger" style="font-size:12px;width:24px;height:24px;margin-left:auto" 
                             onclick="removeBatchFile(${idx})">✕</button>
                 </div>`;
@@ -1634,7 +1649,7 @@
                     if (isSearching) {
                         emptyState.innerHTML = `<div class="icon">🔍</div><h3>未找到匹配的文件</h3><p>请尝试更换搜索关键词</p>`;
                     } else {
-                        emptyState.innerHTML = `<div class="icon">📂</div><h3>仓库还是空的</h3><p>点击"添加文件"开始管理你的文件吧</p><button class="btn btn-primary" onclick="openAddModal()">＋ 添加第一个文件</button>`;
+                        emptyState.innerHTML = `<div class="icon">📂</div><h3>仓库还是空的</h3><p>点击"添加"开始管理你的文件或文件夹吧</p><button class="btn btn-primary" onclick="openAddModal()">＋ 添加第一个</button>`;
                     }
                     emptyState.style.display = 'block';
                     header.style.display = 'none';
@@ -1655,7 +1670,8 @@
             container.innerHTML = files.map(f => {
                 const classes = ['file-item'];
                 if (!f.file_exists) classes.push('missing');
-                const existsBadge = f.file_exists ? '' : '<span style="font-size:11px;color:#f59e0b">⚠ 文件丢失</span>';
+                const existsBadge = f.file_exists ? '' : '<span style="font-size:11px;color:#f59e0b">⚠ 丢失</span>';
+                const formatText = f.is_folder ? '📁' : (f.file_ext || '').replace('.', '');
                 return `
                 <div class="${classes.join(' ')}" data-id="${f.id}" onclick="toggleHighlight(event, ${f.id})">
                     <button class="btn-icon fav${f.favorite ? ' active' : ''}" title="${f.favorite ? '取消收藏' : '收藏'}" onclick="event.stopPropagation();toggleFavorite(${f.id})" style="flex-shrink:0;width:var(--col-icon)"><svg viewBox="0 0 24 24" class="fav-star"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/></svg></button>
@@ -1668,7 +1684,7 @@
                         </div>
                     </div>
                     <span class="tag-gap"></span>
-                    <span class="format-tag">${(f.file_ext || '').replace('.', '')}</span>
+                    <span class="format-tag">${formatText}</span>
                     <span class="tag-gap"></span>
                     ${(() => {
                         const authors = getAuthors(f.author);

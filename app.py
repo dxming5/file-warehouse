@@ -76,6 +76,7 @@ def init_db():
             updated_at TEXT DEFAULT (datetime('now','localtime')),
             last_checked TEXT DEFAULT NULL,
             file_exists INTEGER DEFAULT 1,
+            is_folder INTEGER DEFAULT 0,
             FOREIGN KEY (category_id) REFERENCES categories(id) ON DELETE SET NULL
         );
 
@@ -100,6 +101,11 @@ def init_db():
         db.execute("ALTER TABLE categories ADD COLUMN sort_order INTEGER DEFAULT 0")
     except sqlite3.OperationalError:
         pass
+    # 确保 is_folder 列存在（兼容已有数据库）
+    try:
+        db.execute("ALTER TABLE files ADD COLUMN is_folder INTEGER DEFAULT 0")
+    except sqlite3.OperationalError:
+        pass
     # 确保已有数据的 sort_order 用 id 填充（维持旧排序）
     db.execute("UPDATE categories SET sort_order = id WHERE sort_order = 0")
     db.commit()
@@ -108,10 +114,21 @@ def init_db():
 # ---------- 工具函数 ----------
 
 def get_file_info(file_path):
-    """获取文件基本信息（兼容 Windows 目录联接/junction）"""
+    """获取文件/文件夹基本信息（兼容 Windows 目录联接/junction）"""
     p = Path(file_path)
     # 使用 os.path.exists 替代 Path.exists()，对 Windows 目录联接(mklink /J)兼容性更好
     if os.path.exists(file_path):
+        is_dir = os.path.isdir(file_path)
+        if is_dir:
+            return {
+                'name': p.name,
+                'stem': p.stem,
+                'ext': '',
+                'size': 0,
+                'exists': 1,
+                'is_folder': 1,
+                'modified': '',
+            }
         try:
             stat = p.stat()
             return {
@@ -120,6 +137,7 @@ def get_file_info(file_path):
                 'ext': p.suffix.lower(),
                 'size': stat.st_size,
                 'exists': 1,
+                'is_folder': 0,
                 'modified': datetime.fromtimestamp(stat.st_mtime).strftime('%Y-%m-%d %H:%M'),
             }
         except (OSError, PermissionError):
@@ -130,6 +148,7 @@ def get_file_info(file_path):
                 'ext': p.suffix.lower(),
                 'size': 0,
                 'exists': 1,
+                'is_folder': 0,
                 'modified': '',
             }
     return {
@@ -138,6 +157,7 @@ def get_file_info(file_path):
         'ext': p.suffix.lower(),
         'size': 0,
         'exists': 0,
+        'is_folder': 0,
         'modified': '',
     }
 
@@ -346,6 +366,7 @@ def get_files():
             'author': r['author'],
             'year': r['year'],
             'read_status': r['read_status'],
+            'is_folder': r['is_folder'],
         })
 
     return jsonify({
@@ -388,10 +409,10 @@ def add_file():
 
     db.execute("""
         INSERT INTO files (title, file_path, file_name, file_ext, file_size,
-                          category_id, tags, author, year, file_exists, favorite)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                          category_id, tags, author, year, file_exists, favorite, is_folder)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     """, (title, rel_path, info['name'], info['ext'], info['size'],
-          category_id, tags, author, year, info['exists'], 0))
+          category_id, tags, author, year, info['exists'], 0, info.get('is_folder', 0)))
     db.commit()
 
     return jsonify({'message': '添加成功', 'id': db.execute("SELECT last_insert_rowid()").fetchone()[0]}), 201
@@ -436,10 +457,10 @@ def batch_add_files():
 
         db.execute("""
             INSERT INTO files (title, file_path, file_name, file_ext, file_size,
-                              category_id, tags, author, year, file_exists, favorite)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                              category_id, tags, author, year, file_exists, favorite, is_folder)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """, (title, rel_path, info['name'], info['ext'], info['size'],
-              file_category_id, base_tags, base_author, base_year, info['exists'], 0))
+              file_category_id, base_tags, base_author, base_year, info['exists'], 0, info.get('is_folder', 0)))
         added += 1
 
     db.commit()
@@ -473,11 +494,11 @@ def update_file(file_id):
         info = get_file_info(abs_path)
         db.execute("""
             UPDATE files SET title=?, file_path=?, file_name=?, file_ext=?, file_size=?,
-            tags=?, author=?, year=?, category_id=?, file_exists=?,
+            tags=?, author=?, year=?, category_id=?, file_exists=?, is_folder=?,
             updated_at=datetime('now','localtime')
             WHERE id=?
         """, (title, rel_path, info['name'], info['ext'], info['size'],
-              tags, author, year, category_id, info['exists'], file_id))
+              tags, author, year, category_id, info['exists'], info.get('is_folder', 0), file_id))
     else:
         db.execute("""
             UPDATE files SET title=?, tags=?, author=?, year=?, category_id=?,
@@ -884,7 +905,7 @@ def get_stats():
 
 @app.route('/api/browse-files', methods=['POST'])
 def browse_files():
-    """打开原生文件选择对话框（多选），返回选中文件的真实路径"""
+    """打开原生文件/文件夹选择对话框（多选），返回选中路径的真实信息"""
     try:
         import tkinter as tk
         from tkinter import filedialog
@@ -892,23 +913,34 @@ def browse_files():
         root = tk.Tk()
         root.withdraw()
         root.attributes('-topmost', True)
-        file_paths = filedialog.askopenfilenames(title='选择要添加的文件')
+
+        # 支持选择文件和文件夹
+        data = request.get_json() or {}
+        if data.get('type') == 'folder':
+            folder_path = filedialog.askdirectory(title='选择要添加的文件夹')
+            file_paths = [folder_path] if folder_path else []
+        else:
+            file_paths = filedialog.askopenfilenames(title='选择要添加的文件')
+        
         root.destroy()
         
         result = []
         for fp in file_paths:
+            if not fp:
+                continue
             info = get_file_info(fp)
             result.append({
                 'path': to_relative_path(fp), 
                 'name': info['name'], 
                 'size': info['size'], 
-                'ext': info['ext']
+                'ext': info['ext'],
+                'is_folder': info.get('is_folder', 0),
             })
         return jsonify({'files': result})
     except Exception as e:
         import traceback
         traceback.print_exc()
-        return jsonify({'error': f'文件选择失败: {str(e)}'}), 500
+        return jsonify({'error': f'选择失败: {str(e)}'}), 500
 
 
 
