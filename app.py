@@ -80,7 +80,6 @@ def init_db():
             created_at TEXT DEFAULT (datetime('now','localtime')),
             updated_at TEXT DEFAULT (datetime('now','localtime')),
             last_checked TEXT DEFAULT NULL,
-            file_exists INTEGER DEFAULT 1,
             is_folder INTEGER DEFAULT 0,
             FOREIGN KEY (category_id) REFERENCES categories(id) ON DELETE SET NULL
         );
@@ -88,7 +87,6 @@ def init_db():
         CREATE INDEX IF NOT EXISTS idx_files_category ON files(category_id);
         CREATE INDEX IF NOT EXISTS idx_files_title ON files(title);
         CREATE INDEX IF NOT EXISTS idx_files_tags ON files(tags);
-        CREATE INDEX IF NOT EXISTS idx_files_file_exists ON files(file_exists);
         CREATE INDEX IF NOT EXISTS idx_categories_parent ON categories(parent_id);
     """)
     # 确保 year 列存在（兼容已有数据库）
@@ -208,35 +206,10 @@ def open_folder(file_path):
         return False
 
 def verify_files(db):
-    """批量校验文件是否存在（兼容 Windows 目录联接/junction）"""
-    # 1. 检查已标记为存在的文件，确认是否真的丢失
-    rows = db.execute("SELECT id, file_path FROM files WHERE file_exists = 1").fetchall()
-    lost_ids = []
-    for row in rows:
-        if not os.path.exists(to_absolute_path(row['file_path'])):
-            lost_ids.append(row['id'])
-    if lost_ids:
-        placeholders = ','.join('?' * len(lost_ids))
-        db.execute(
-            f"UPDATE files SET file_exists = 0, last_checked = datetime('now','localtime') WHERE id IN ({placeholders})",
-            lost_ids
-        )
-
-    # 2. 检查已标记为丢失的文件，若实际存在则修正（解决 junction 误判问题）
-    missing_rows = db.execute("SELECT id, file_path FROM files WHERE file_exists = 0").fetchall()
-    recovered_ids = []
-    for row in missing_rows:
-        if os.path.exists(to_absolute_path(row['file_path'])):
-            recovered_ids.append(row['id'])
-    if recovered_ids:
-        placeholders = ','.join('?' * len(recovered_ids))
-        db.execute(
-            f"UPDATE files SET file_exists = 1, last_checked = datetime('now','localtime') WHERE id IN ({placeholders})",
-            recovered_ids
-        )
-
-    db.commit()
-    return len(lost_ids), len(recovered_ids)
+    """扫描所有文件，返回丢失数量（实时检测）"""
+    rows = db.execute("SELECT file_path FROM files").fetchall()
+    lost_count = sum(1 for r in rows if not os.path.exists(to_absolute_path(r['file_path'])))
+    return lost_count
 
 # ---------- API 路由 ----------
 
@@ -305,10 +278,6 @@ def get_files():
         conditions.append("category_id = ?")
         params.append(category_id)
 
-    if file_exists is not None:
-        conditions.append("file_exists = ?")
-        params.append(file_exists)
-
     if favorite is not None:
         conditions.append("favorite = ?")
         params.append(favorite)
@@ -317,11 +286,13 @@ def get_files():
         conditions.append("category_id IS NULL")
 
     where = " AND ".join(conditions)
-
     offset = (page - 1) * per_page
 
-    if sort_by == 'title':
-        # 模拟 Windows 排序：英文/数字在前 → 中文在后（中文转拼音后自然排序）
+    # file_exists 筛选需在 Python 层实时检测，无法用 SQL
+    need_python_filter = file_exists is not None
+    need_python_all = (sort_by == 'title') or need_python_filter
+
+    if need_python_all:
         all_rows = db.execute(
             f"SELECT f.*, c.name as category_name, c.color as category_color "
             f"FROM files f LEFT JOIN categories c ON f.category_id = c.id "
@@ -329,18 +300,31 @@ def get_files():
             params
         ).fetchall()
 
-        def _title_sort_key(r):
-            t = (r['title'] or '')
-            try:
-                pinyin_str = ''.join(pypinyin.lazy_pinyin(t))
-            except Exception:
-                pinyin_str = t
-            # 以中文开头 → 排到后面；英文/数字开头 → 排前面
-            is_cjk_start = 1 if (t and '\u4e00' <= t[0] <= '\u9fff') else 0
-            return _natsort_key((is_cjk_start, pinyin_str))
+        # 实时检测文件是否存在并筛选
+        if need_python_filter:
+            filtered = []
+            for row in all_rows:
+                exists_val = 1 if os.path.exists(to_absolute_path(row['file_path'])) else 0
+                if exists_val == file_exists:
+                    filtered.append(row)
+            all_rows = filtered
 
-        _natsort_key = natsort_keygen(alg=ns.IGNORECASE)
-        all_rows = sorted(all_rows, key=_title_sort_key, reverse=(sort_order == 'desc'))
+        if sort_by == 'title':
+            # 模拟 Windows 排序：英文/数字在前 → 中文在后（中文转拼音后自然排序）
+            def _title_sort_key(r):
+                t = (r['title'] or '')
+                try:
+                    pinyin_str = ''.join(pypinyin.lazy_pinyin(t))
+                except Exception:
+                    pinyin_str = t
+                is_cjk_start = 1 if (t and '\u4e00' <= t[0] <= '\u9fff') else 0
+                return _natsort_key((is_cjk_start, pinyin_str))
+
+            _natsort_key = natsort_keygen(alg=ns.IGNORECASE)
+            all_rows = sorted(all_rows, key=_title_sort_key, reverse=(sort_order == 'desc'))
+        else:
+            all_rows = sorted(all_rows, key=lambda r: r[sort_by] or '', reverse=(sort_order == 'desc'))
+
         total = len(all_rows)
         rows = all_rows[offset:offset + per_page]
     else:
@@ -366,7 +350,7 @@ def get_files():
             'tags': r['tags'],
             'created_at': r['created_at'],
             'updated_at': r['updated_at'],
-            'file_exists': r['file_exists'],
+            'file_exists': 1 if os.path.exists(to_absolute_path(r['file_path'])) else 0,
             'favorite': r['favorite'],
             'author': r['author'],
             'year': r['year'],
@@ -414,10 +398,10 @@ def add_file():
 
     db.execute("""
         INSERT INTO files (title, file_path, file_name, file_ext, file_size,
-                          category_id, tags, author, year, file_exists, favorite, is_folder)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                          category_id, tags, author, year, favorite, is_folder)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     """, (title, rel_path, info['name'], info['ext'], info['size'],
-          category_id, tags, author, year, info['exists'], 0, info.get('is_folder', 0)))
+          category_id, tags, author, year, 0, info.get('is_folder', 0)))
     db.commit()
 
     return jsonify({'message': '添加成功', 'id': db.execute("SELECT last_insert_rowid()").fetchone()[0]}), 201
@@ -462,10 +446,10 @@ def batch_add_files():
 
         db.execute("""
             INSERT INTO files (title, file_path, file_name, file_ext, file_size,
-                              category_id, tags, author, year, file_exists, favorite, is_folder)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                              category_id, tags, author, year, favorite, is_folder)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """, (title, rel_path, info['name'], info['ext'], info['size'],
-              file_category_id, base_tags, base_author, base_year, info['exists'], 0, info.get('is_folder', 0)))
+              file_category_id, base_tags, base_author, base_year, 0, info.get('is_folder', 0)))
         added += 1
 
     db.commit()
@@ -499,11 +483,11 @@ def update_file(file_id):
         info = get_file_info(abs_path)
         db.execute("""
             UPDATE files SET title=?, file_path=?, file_name=?, file_ext=?, file_size=?,
-            tags=?, author=?, year=?, category_id=?, file_exists=?, is_folder=?,
+            tags=?, author=?, year=?, category_id=?, is_folder=?,
             updated_at=datetime('now','localtime')
             WHERE id=?
         """, (title, rel_path, info['name'], info['ext'], info['size'],
-              tags, author, year, category_id, info['exists'], info.get('is_folder', 0), file_id))
+              tags, author, year, category_id, info.get('is_folder', 0), file_id))
     else:
         db.execute("""
             UPDATE files SET title=?, tags=?, author=?, year=?, category_id=?,
@@ -569,14 +553,7 @@ def open_file(file_id):
 
     abs_path = to_absolute_path(file['file_path'])
     if not os.path.exists(abs_path):
-        db.execute("UPDATE files SET file_exists=0 WHERE id=?", (file_id,))
-        db.commit()
         return jsonify({'error': '文件不存在，可能已被移动或删除'}), 404
-
-    # 文件存在，若之前被误标记为丢失则修正
-    if file['file_exists'] == 0:
-        db.execute("UPDATE files SET file_exists=1, last_checked=datetime('now','localtime') WHERE id=?", (file_id,))
-        db.commit()
 
     success = open_file_with_default(abs_path)
     if success:
@@ -593,14 +570,7 @@ def locate_file(file_id):
 
     abs_path = to_absolute_path(file['file_path'])
     if not os.path.exists(abs_path):
-        db.execute("UPDATE files SET file_exists=0 WHERE id=?", (file_id,))
-        db.commit()
         return jsonify({'error': '路径不存在，可能已被移动或删除'}), 404
-
-    # 存在，若之前被误标记为丢失则修正
-    if file['file_exists'] == 0:
-        db.execute("UPDATE files SET file_exists=1 WHERE id=?", (file_id,))
-        db.commit()
 
     success = open_folder(abs_path)
     if success:
@@ -609,7 +579,7 @@ def locate_file(file_id):
 
 @app.route('/api/files/<int:file_id>/verify', methods=['POST'])
 def verify_file(file_id):
-    """校验单个文件是否存在"""
+    """校验单个文件是否存在（实时检测）"""
     db = get_db()
     file = db.execute("SELECT * FROM files WHERE id = ?", (file_id,)).fetchone()
     if not file:
@@ -617,23 +587,15 @@ def verify_file(file_id):
 
     abs_path = to_absolute_path(file['file_path'])
     exists = 1 if os.path.exists(abs_path) else 0
-    db.execute("UPDATE files SET file_exists=?, last_checked=datetime('now','localtime') WHERE id=?",
-               (exists, file_id))
-    db.commit()
     return jsonify({'file_exists': exists})
 
 @app.route('/api/files/verify-all', methods=['POST'])
 def verify_all_files():
-    """批量校验所有文件"""
+    """批量校验所有文件（实时检测）"""
     db = get_db()
-    lost_count, recovered_count = verify_files(db)
-    msg_parts = []
-    if lost_count:
-        msg_parts.append(f'{lost_count} 个文件不存在')
-    if recovered_count:
-        msg_parts.append(f'{recovered_count} 个文件已恢复')
-    msg = '校验完成：' + '，'.join(msg_parts) if msg_parts else '校验完成，所有文件状态正常'
-    return jsonify({'message': msg, 'missing': lost_count, 'recovered': recovered_count})
+    lost_count = verify_files(db)
+    msg = f'校验完成：{lost_count} 个文件不存在' if lost_count else '校验完成，所有文件状态正常'
+    return jsonify({'message': msg, 'missing': lost_count})
 
 @app.route('/api/files/<int:file_id>/favorite', methods=['POST'])
 def toggle_favorite(file_id):
@@ -891,7 +853,9 @@ def move_category(cat_id):
 def get_stats():
     db = get_db()
     total = db.execute("SELECT COUNT(*) FROM files").fetchone()[0]
-    exists = db.execute("SELECT COUNT(*) FROM files WHERE file_exists=1").fetchone()[0]
+    # 实时检测所有文件是否存在
+    all_paths = db.execute("SELECT file_path FROM files").fetchall()
+    exists = sum(1 for f in all_paths if os.path.exists(to_absolute_path(f['file_path'])))
     missing = total - exists
     favorites = db.execute("SELECT COUNT(*) FROM files WHERE favorite=1").fetchone()[0]
     uncategorized = db.execute("SELECT COUNT(*) FROM files WHERE category_id IS NULL").fetchone()[0]
@@ -1004,7 +968,7 @@ if __name__ == '__main__':
     # 初始化数据库
     init_db()
 
-    # 后台静默校验所有文件状态（不阻塞启动）
+    # 后台静默扫描所有文件状态（不阻塞启动，用于预热文件系统缓存）
     def _bg_verify():
         global _bg_verify_done
         try:

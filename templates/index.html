@@ -171,6 +171,7 @@
             flex: 1;
             display: flex;
             flex-direction: column;
+            min-width: 0;
             min-height: 0;
         }
         .topbar {
@@ -181,10 +182,19 @@
             align-items: center;
             gap: 12px;
             box-shadow: var(--shadow-sm);
+            overflow: hidden;
         }
         .topbar .title {
             font-size: 18px;
             font-weight: 700;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            flex-shrink: 1;
+            min-width: 0;
+        }
+        .topbar .count {
+            flex-shrink: 0;
         }
         .topbar .count {
             font-size: 13px;
